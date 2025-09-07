@@ -795,11 +795,15 @@ export default async function SharedDeadlinePage({ params }: PageProps) {
                         </div>
                       </div>
                       <div className="text-left sm:text-right">
-                        <div className="flex items-center text-blue-600">
+                        <div className={`flex items-center ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
                           <Timer className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                           <div className="text-right">
                             <p className="font-medium">
-                              {daysUntilDue > 0 ? `${daysUntilDue} days left` : "Due today"}
+                              {isOverdue 
+                                ? "Overdue" 
+                                : daysUntilDue > 0 
+                                  ? `${daysUntilDue} days left` 
+                                  : "Due today"}
                             </p>
                           </div>
                         </div>

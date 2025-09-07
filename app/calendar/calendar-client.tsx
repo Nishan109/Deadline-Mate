@@ -27,6 +27,8 @@ import {
   Menu,
   ArrowLeft,
   StickyNote,
+  Star,
+  AlertCircle,
 } from "lucide-react"
 import { signOut } from "../auth/actions"
 import {
@@ -605,36 +607,80 @@ export default function CalendarClient({ user, initialDeadlines, isDemoMode = fa
                         <p className="text-gray-500 text-center py-6 sm:py-8 text-sm">No deadlines for this date</p>
                       ) : (
                         selectedDateDeadlines.map((deadline) => (
-                          <div key={deadline.id} className="border rounded-lg p-2 sm:p-3">
-                            <div className="flex items-start justify-between mb-1 sm:mb-2">
-                              <h4 className="font-medium text-xs sm:text-sm">{deadline.title}</h4>
-                              <Badge
-                                variant="outline"
-                                className={`text-xs ${
-                                  deadline.priority === "high"
-                                    ? "border-red-200 text-red-700"
-                                    : deadline.priority === "medium"
-                                      ? "border-orange-200 text-orange-700"
-                                      : "border-green-200 text-green-700"
-                                }`}
-                              >
-                                {deadline.priority}
-                              </Badge>
+                          <div key={deadline.id} className="group relative overflow-hidden bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 rounded-xl bg-gradient-to-br from-white to-gray-50">
+                            {/* Priority indicator bar */}
+                            <div className={`absolute top-0 left-0 w-1 h-full ${
+                              deadline.priority === "high" ? "bg-red-500" : 
+                              deadline.priority === "medium" ? "bg-orange-500" : "bg-green-500"
+                            } rounded-l-xl`} />
+                            
+                            <div className="p-4">
+                              <div className="flex items-start justify-between mb-3">
+                                <h4 className="font-bold text-sm text-gray-900 group-hover:text-gray-800 transition-colors leading-tight">
+                                  {deadline.title}
+                                </h4>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs font-medium ${
+                                    deadline.priority === "high"
+                                      ? "border-red-200 text-red-700 bg-gradient-to-r from-red-50 to-pink-50"
+                                      : deadline.priority === "medium"
+                                        ? "border-orange-200 text-orange-700 bg-gradient-to-r from-orange-50 to-amber-50"
+                                        : "border-green-200 text-green-700 bg-gradient-to-r from-green-50 to-emerald-50"
+                                  }`}
+                                >
+                                  <Star className="w-3 h-3 mr-1" />
+                                  {deadline.priority}
+                                </Badge>
+                              </div>
+                              
+                              {deadline.description && (
+                                <p className="text-xs text-gray-600 mb-3 leading-relaxed line-clamp-2">
+                                  {deadline.description}
+                                </p>
+                              )}
+                              
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="flex items-center text-gray-600 text-xs font-medium bg-gray-100 px-2 py-1 rounded-lg">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  {format(deadline.dueDate, "h:mm a")}
+                                </span>
+                                <Badge 
+                                  className={`text-xs font-semibold px-2 py-1 rounded-full shadow-sm border-0 ${
+                                    deadline.status === "completed"
+                                      ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
+                                      : deadline.status === "overdue"
+                                        ? "bg-gradient-to-r from-red-500 to-red-600 text-white"
+                                        : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
+                                  }`}
+                                >
+                                  {deadline.status === "completed" ? (
+                                    <>
+                                      <CheckCircle className="w-3 h-3 mr-1" />
+                                      Completed
+                                    </>
+                                  ) : deadline.status === "overdue" ? (
+                                    <>
+                                      <AlertCircle className="w-3 h-3 mr-1" />
+                                      Overdue
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      {deadline.status.replace("_", " ")}
+                                    </>
+                                  )}
+                                </Badge>
+                              </div>
+                              
+                              {/* Enhanced deadline badge */}
+                              <div className="flex justify-center">
+                                {getDeadlineBadge(deadline)}
+                              </div>
                             </div>
-                            {deadline.description && (
-                              <p className="text-xs text-gray-600 mb-1 sm:mb-2">{deadline.description}</p>
-                            )}
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="flex items-center text-gray-500">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {format(deadline.dueDate, "h:mm a")}
-                              </span>
-                              <Badge variant="secondary" className={`text-xs ${getStatusColor(deadline.status)}`}>
-                                {deadline.status.replace("_", " ")}
-                              </Badge>
-                            </div>
-                            {/* Enhanced deadline badge */}
-                            <div className="mt-2">{getDeadlineBadge(deadline)}</div>
+                            
+                            {/* Hover effect overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-transparent group-hover:from-white/5 group-hover:via-white/10 group-hover:to-white/5 transition-all duration-300 rounded-xl pointer-events-none" />
                           </div>
                         ))
                       )}

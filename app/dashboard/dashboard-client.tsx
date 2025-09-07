@@ -23,6 +23,7 @@ import {
   Calendar,
   Clock,
   CheckCircle,
+  AlertCircle,
   AlertTriangle,
   Settings,
   LogOut,
@@ -44,6 +45,7 @@ import AddDeadlineDialog from "./add-deadline-dialog"
 import EditDeadlineDialog from "./edit-deadline-dialog"
 import DeleteDeadlineDialog from "./delete-deadline-dialog"
 import ShareDeadlineDialog from "@/components/share-deadline-dialog"
+import DeadlineDetailSheet from "@/components/deadlines/deadline-detail-sheet"
 import { format, isToday, isThisWeek, isPast, isFuture } from "date-fns"
 import { LoadingButton } from "@/components/loading-button"
 import { NotificationSystem } from "@/components/notification-system"
@@ -85,6 +87,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
+  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false)
   const [selectedDeadline, setSelectedDeadline] = useState<Deadline | null>(null)
   const [activeFilter, setActiveFilter] = useState("all")
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -214,7 +217,8 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
 
     if (status === "completed") {
       return (
-        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs">
+        <Badge className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border-0">
+          <CheckCircle className="w-3 h-3 mr-1.5" />
           Completed
         </Badge>
       )
@@ -222,22 +226,34 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
 
     if (isPast(date) && status !== "completed") {
       return (
-        <Badge variant="destructive" className="text-xs">
+        <Badge className="bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border-0">
+          <AlertCircle className="w-3 h-3 mr-1.5" />
           Overdue
         </Badge>
       )
     }
 
     if (isToday(date)) {
-      return <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">Today</Badge>
+      return (
+        <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border-0">
+          <Clock className="w-3 h-3 mr-1.5" />
+          Today
+        </Badge>
+      )
     }
 
     if (isThisWeek(date)) {
-      return <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs">This Week</Badge>
+      return (
+        <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border-0">
+          <Calendar className="w-3 h-3 mr-1.5" />
+          This Week
+        </Badge>
+      )
     }
 
     return (
-      <Badge variant="outline" className="text-xs">
+      <Badge className="bg-gradient-to-r from-gray-500 to-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border-0">
+        <Calendar className="w-3 h-3 mr-1.5" />
         Later
       </Badge>
     )
@@ -352,6 +368,11 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
     e.stopPropagation()
     setSelectedDeadline(deadline)
     setIsShareDialogOpen(true)
+  }, [])
+
+  const handleDeadlineClick = useCallback((deadline: Deadline) => {
+    setSelectedDeadline(deadline)
+    setIsDetailSheetOpen(true)
   }, [])
 
   // Get display name and avatar
@@ -706,116 +727,171 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
               filteredDeadlines.map((deadline) => (
                 <Card
                   key={deadline.id}
-                  className={`border-l-4 ${getPriorityColor(deadline.priority)} bg-white shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}
+                  onClick={() => handleDeadlineClick(deadline)}
+                  className={`group relative overflow-hidden bg-white border-0 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 rounded-2xl cursor-pointer active:scale-[0.98] mobile-tap-feedback ${
+                    deadline.status === "completed" 
+                      ? "opacity-75 bg-gradient-to-br from-gray-50 to-gray-100" 
+                      : "bg-gradient-to-br from-white to-gray-50"
+                  }`}
                 >
-                  <CardHeader className="pb-2 sm:pb-3 p-3 sm:p-6">
-                    <div className="flex items-start justify-between gap-2">
+                  {/* Priority indicator bar */}
+                  <div className={`absolute top-0 left-0 w-1 h-full ${getPriorityColor(deadline.priority).replace('border-l-', 'bg-')} rounded-l-2xl`} />
+                  
+                  {/* Status indicator overlay */}
+                  {deadline.status === "completed" && (
+                    <div className="absolute top-4 right-4 z-10">
+                      <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+                        <CheckCircle className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  )}
+
+                  <CardHeader className="pb-4 p-4 sm:p-6">
+                    <div className="flex items-start justify-between gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start space-x-2 sm:space-x-3 mb-2">
-                          <button
-                            onClick={() => toggleDeadlineStatus(deadline.id)}
-                            className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 mt-0.5 hover:scale-110 ${
-                              deadline.status === "completed"
-                                ? "bg-gradient-to-r from-emerald-500 to-emerald-600 border-emerald-500 shadow-lg"
-                                : "border-gray-300 hover:border-emerald-500 hover:bg-emerald-50"
-                            }`}
-                          >
-                            {deadline.status === "completed" && (
-                              <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                            )}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <CardTitle
-                              className={`text-sm sm:text-lg leading-tight font-bold ${deadline.status === "completed" ? "line-through text-gray-500" : "text-gray-900"}`}
+                        {/* Title and status row */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start space-x-2 sm:space-x-3 flex-1 min-w-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleDeadlineStatus(deadline.id)
+                              }}
+                              className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300 flex-shrink-0 mt-1 hover:scale-110 ${
+                                deadline.status === "completed"
+                                  ? "bg-gradient-to-r from-emerald-500 to-emerald-600 border-emerald-500 shadow-lg"
+                                  : "border-gray-300 hover:border-emerald-500 hover:bg-emerald-50 group-hover:border-emerald-400"
+                              }`}
                             >
-                              {deadline.title}
-                            </CardTitle>
-                            <div className="mt-1 sm:mt-2">{getDeadlineBadge(deadline.due_date, deadline.status)}</div>
+                              {deadline.status === "completed" && (
+                                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <CardTitle
+                                className={`text-base sm:text-lg font-bold leading-tight mb-2 ${
+                                  deadline.status === "completed" 
+                                    ? "line-through text-gray-500" 
+                                    : "text-gray-900 group-hover:text-gray-800"
+                                }`}
+                              >
+                                {deadline.title}
+                              </CardTitle>
+                            </div>
+                          </div>
+                          
+                          {/* Status badge - responsive */}
+                          <div className="flex-shrink-0 hidden sm:block">
+                            {getDeadlineBadge(deadline.due_date, deadline.status)}
                           </div>
                         </div>
+
+                        {/* Mobile status badge */}
+                        <div className="flex-shrink-0 sm:hidden mb-3">
+                          {getDeadlineBadge(deadline.due_date, deadline.status)}
+                        </div>
+
+                        {/* Description */}
                         {deadline.description && (
-                          <CardDescription className="ml-7 sm:ml-9 text-xs sm:text-sm text-gray-600">
+                          <CardDescription className="ml-8 sm:ml-9 text-xs sm:text-sm text-gray-600 leading-relaxed mb-4 line-clamp-2">
                             {deadline.description}
                           </CardDescription>
                         )}
+
+                        {/* Category and Priority badges */}
+                        <div className="flex items-center gap-2 mb-4 ml-8 sm:ml-9 flex-wrap">
+                          {deadline.category && (
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
+                            >
+                              <div className="w-2 h-2 bg-blue-500 rounded-full mr-1.5" />
+                              {deadline.category}
+                            </Badge>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-medium ${
+                              deadline.priority === "high"
+                                ? "border-red-200 text-red-700 bg-gradient-to-r from-red-50 to-pink-50 hover:bg-red-100"
+                                : deadline.priority === "medium"
+                                  ? "border-orange-200 text-orange-700 bg-gradient-to-r from-orange-50 to-amber-50 hover:bg-orange-100"
+                                  : "border-green-200 text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 hover:bg-green-100"
+                            } transition-colors`}
+                          >
+                            <Star className="w-3 h-3 mr-1.5" />
+                            {deadline.priority} priority
+                          </Badge>
+                        </div>
                       </div>
+
+                      {/* Actions menu */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="flex-shrink-0 h-8 w-8 p-0 hover:bg-gray-100 transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-shrink-0 h-8 w-8 sm:h-9 sm:w-9 p-0 hover:bg-gray-100 transition-all duration-200 rounded-full group-hover:bg-gray-100"
                           >
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="shadow-lg">
-                          <DropdownMenuItem onClick={(e) => handleShareClick(e, deadline)} className="hover:bg-blue-50">
-                            <Share2 className="w-4 h-4 mr-2 text-blue-600" />
+                        <DropdownMenuContent align="end" className="shadow-xl border-0 rounded-xl">
+                          <DropdownMenuItem onClick={(e) => handleShareClick(e, deadline)} className="hover:bg-blue-50 rounded-lg">
+                            <Share2 className="w-4 h-4 mr-3 text-blue-600" />
                             Share
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => handleEditClick(e, deadline)}
-                            className="hover:bg-emerald-50"
+                            className="hover:bg-emerald-50 rounded-lg"
                           >
-                            <Edit className="w-4 h-4 mr-2 text-emerald-600" />
+                            <Edit className="w-4 h-4 mr-3 text-emerald-600" />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => handleDeleteClick(e, deadline)}
-                            className="text-red-600 hover:bg-red-50"
+                            className="text-red-600 hover:bg-red-50 rounded-lg"
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
+                            <Trash2 className="w-4 h-4 mr-3" />
                             Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-0 p-3 sm:p-6 sm:pt-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm text-gray-600 ml-7 sm:ml-9 gap-2">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                        <span className="flex items-center bg-gray-100 px-2 py-1 rounded-lg">
-                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+
+                  <CardContent className="pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
+                    {/* Date and time info */}
+                    <div className="ml-8 sm:ml-9 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
+                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-600" />
                           {format(new Date(deadline.due_date), "MMM dd, yyyy")}
-                        </span>
-                        <span className="flex items-center bg-gray-100 px-2 py-1 rounded-lg">
-                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                        </div>
+                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
+                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-600" />
                           {format(new Date(deadline.due_date), "h:mm a")}
-                        </span>
+                        </div>
                         {deadline.project_link && (
                           <a
                             href={deadline.project_link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100"
+                            className="flex items-center text-blue-600 hover:text-blue-800 transition-all duration-200 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium border border-blue-200 hover:border-blue-300"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                            <span className="underline">Project</span>
+                            <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                            <span className="hidden sm:inline">Project Link</span>
+                            <span className="sm:hidden">Link</span>
                           </a>
                         )}
-                        {deadline.category && (
-                          <Badge variant="outline" className="text-xs bg-white">
-                            {deadline.category}
-                          </Badge>
-                        )}
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs flex-shrink-0 font-medium ${
-                          deadline.priority === "high"
-                            ? "border-red-200 text-red-700 bg-red-50"
-                            : deadline.priority === "medium"
-                              ? "border-orange-200 text-orange-700 bg-orange-50"
-                              : "border-green-200 text-green-700 bg-green-50"
-                        }`}
-                      >
-                        <Star className="w-3 h-3 mr-1" />
-                        {deadline.priority} priority
-                      </Badge>
                     </div>
                   </CardContent>
+
+                  {/* Hover effect overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-transparent group-hover:from-white/5 group-hover:via-white/10 group-hover:to-white/5 transition-all duration-500 rounded-2xl pointer-events-none" />
                 </Card>
               ))
             )}
@@ -866,6 +942,19 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
         }}
         deadline={selectedDeadline}
         isDemoMode={isDemoMode}
+      />
+
+      <DeadlineDetailSheet
+        isOpen={isDetailSheetOpen}
+        onClose={() => {
+          setIsDetailSheetOpen(false)
+          setSelectedDeadline(null)
+        }}
+        deadline={selectedDeadline}
+        onEdit={handleEditClick}
+        onDelete={handleDeleteClick}
+        onShare={handleShareClick}
+        onToggleStatus={toggleDeadlineStatus}
       />
     </div>
   )

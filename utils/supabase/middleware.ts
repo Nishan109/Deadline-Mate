@@ -70,16 +70,30 @@ export async function updateSession(request: NextRequest) {
     // Don't throw - just continue without user
   }
 
-  // Only enforce authentication if we have Supabase configured and user is required
-  if (
-    supabaseUrl &&
-    supabaseAnonKey &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/auth") &&
-    !request.nextUrl.pathname.startsWith("/") &&
-    request.nextUrl.pathname !== "/"
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  // Redirect behavior and protection rules
+  const pathname = request.nextUrl.pathname
+
+  // If authenticated users visit '/' or '/auth', send them to dashboard
+  if (user && (pathname === "/" || pathname.startsWith("/auth"))) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/dashboard"
+    return NextResponse.redirect(url)
+  }
+
+  // Gate protected routes for unauthenticated users
+  const protectedPrefixes = [
+    "/dashboard",
+    "/notes",
+    "/calendar",
+    "/timetable",
+    "/quick-links",
+    "/analytics",
+    "/profile",
+  ]
+
+  const isProtected = protectedPrefixes.some((prefix) => pathname.startsWith(prefix))
+
+  if (supabaseUrl && supabaseAnonKey && !user && isProtected) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth"
     return NextResponse.redirect(url)

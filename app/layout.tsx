@@ -1,11 +1,15 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Poppins } from "next/font/google"
 import "./globals.css"
 import { PageLoading } from "@/components/page-loading"
 import { NavigationProgress } from "@/components/navigation-progress"
 
-const inter = Inter({ subsets: ["latin"] })
+const poppins = Poppins({ 
+  weight: ['300', '400', '500', '600', '700'],
+  subsets: ["latin"],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: "DeadlineMate - Stay Ahead of Every Deadline",
@@ -21,7 +25,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={poppins.className}>
         <NavigationProgress />
         <PageLoading />
         {children}

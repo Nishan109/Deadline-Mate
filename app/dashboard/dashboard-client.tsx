@@ -728,7 +728,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                 <Card
                   key={deadline.id}
                   onClick={() => handleDeadlineClick(deadline)}
-                  className={`group relative overflow-hidden bg-white border-0 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 rounded-2xl cursor-pointer active:scale-[0.98] mobile-tap-feedback ${
+                  className={`group relative overflow-hidden bg-white border-0 shadow-lg hover:shadow-xl sm:hover:shadow-2xl transition-all duration-300 sm:duration-500 hover:-translate-y-1 sm:hover:-translate-y-2 rounded-xl sm:rounded-2xl cursor-pointer active:scale-[0.98] mobile-tap-feedback ${
                     deadline.status === "completed" 
                       ? "opacity-75 bg-gradient-to-br from-gray-50 to-gray-100" 
                       : "bg-gradient-to-br from-white to-gray-50"
@@ -746,7 +746,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                     </div>
                   )}
 
-                  <CardHeader className="pb-4 p-4 sm:p-6">
+                  <CardHeader className="pb-3 p-3 sm:pb-4 sm:p-6">
                     <div className="flex items-start justify-between gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
                         {/* Title and status row */}
@@ -787,7 +787,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                         </div>
 
                         {/* Mobile status badge */}
-                        <div className="flex-shrink-0 sm:hidden mb-3">
+                        <div className="flex-shrink-0 sm:hidden mb-2 ml-8">
                           {getDeadlineBadge(deadline.due_date, deadline.status)}
                         </div>
 
@@ -799,7 +799,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                         )}
 
                         {/* Category and Priority badges */}
-                        <div className="flex items-center gap-2 mb-4 ml-8 sm:ml-9 flex-wrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4 ml-8 sm:ml-9 flex-wrap">
                           {deadline.category && (
                             <Badge 
                               variant="outline" 
@@ -861,16 +861,16 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                     </div>
                   </CardHeader>
 
-                  <CardContent className="pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
+                  <CardContent className="pt-0 px-3 sm:px-6 pb-3 sm:pb-6">
                     {/* Date and time info */}
-                    <div className="ml-8 sm:ml-9 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
-                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-600" />
+                    <div className="ml-8 sm:ml-9 space-y-2 sm:space-y-3">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-1.5 sm:px-3 py-1 sm:py-2 rounded-md sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
+                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 text-gray-600" />
                           {format(new Date(deadline.due_date), "MMM dd, yyyy")}
                         </div>
-                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
-                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-600" />
+                        <div className="flex items-center bg-gradient-to-r from-gray-100 to-gray-200 px-1.5 sm:px-3 py-1 sm:py-2 rounded-md sm:rounded-xl text-xs sm:text-sm font-medium text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-200">
+                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 text-gray-600" />
                           {format(new Date(deadline.due_date), "h:mm a")}
                         </div>
                         {deadline.project_link && (
@@ -878,7 +878,7 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                             href={deadline.project_link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center text-blue-600 hover:text-blue-800 transition-all duration-200 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium border border-blue-200 hover:border-blue-300"
+                            className="flex items-center text-blue-600 hover:text-blue-800 transition-all duration-200 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 px-1.5 sm:px-3 py-1 sm:py-2 rounded-md sm:rounded-xl text-xs sm:text-sm font-medium border border-blue-200 hover:border-blue-300"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/utils/supabase/client"
 import type { User } from "@supabase/auth-helpers-nextjs"
-import { Calendar, Plus, Search, ChevronLeft, ChevronRight, Settings, MapPin } from "lucide-react"
+import { Calendar, Plus, Search, ChevronLeft, ChevronRight, Settings, MapPin, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -132,6 +132,7 @@ export function TimetableClient({
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [loading, setLoading] = useState(true)
   const [isDemo, setIsDemo] = useState(isDemoMode || !user?.id)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const supabase = createClient()
 
@@ -349,6 +350,15 @@ export function TimetableClient({
       return
     }
     await loadActivitiesFromDatabase()
+  }
+
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true)
+      await loadActivities()
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const loadCurrentAndNextActivity = () => {
@@ -618,6 +628,16 @@ export function TimetableClient({
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Activity
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="bg-white/70 backdrop-blur-sm border-gray-200/50"
+                aria-label="Refresh activities"
+              >
+                <RotateCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                {isRefreshing ? "Refreshing" : "Refresh"}
               </Button>
             </div>
           </div>

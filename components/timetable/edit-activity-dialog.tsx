@@ -394,8 +394,8 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id={`recurring-${index}`}
-                        checked={schedule.is_recurring}
-                        onCheckedChange={(checked) => updateSchedule(index, "is_recurring", checked)}
+                        checked={!!schedule.is_recurring}
+                        onCheckedChange={(checked) => updateSchedule(index, "is_recurring", Boolean(checked))}
                       />
                       <Label htmlFor={`recurring-${index}`} className="text-xs sm:text-sm">
                         Repeat weekly
@@ -405,8 +405,8 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id={`active-${index}`}
-                        checked={schedule.is_active}
-                        onCheckedChange={(checked) => updateSchedule(index, "is_active", checked)}
+                        checked={!!schedule.is_active}
+                        onCheckedChange={(checked) => updateSchedule(index, "is_active", Boolean(checked))}
                       />
                       <Label htmlFor={`active-${index}`} className="text-xs sm:text-sm">
                         Active

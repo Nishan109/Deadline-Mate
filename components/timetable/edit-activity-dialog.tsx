@@ -127,6 +127,22 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
 
     setLoading(true)
     try {
+      // Basic validation
+      if (!formData.title.trim()) {
+        throw new Error("Title is required")
+      }
+      for (const [i, s] of schedules.entries()) {
+        if (!Number.isFinite(s.day_of_week)) {
+          throw new Error(`Schedule ${i + 1}: day of week is invalid`)
+        }
+        if (!s.start_time || !s.end_time) {
+          throw new Error(`Schedule ${i + 1}: start and end time are required`)
+        }
+        if (s.start_time >= s.end_time) {
+          throw new Error(`Schedule ${i + 1}: start time must be before end time`)
+        }
+      }
+
       const { error: activityError } = await supabase
         .from("activities")
         .update({
@@ -139,16 +155,26 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
         })
         .eq("id", activity.id)
 
-      if (activityError) throw activityError
+      if (activityError) {
+        console.error("Supabase activity update error:", activityError)
+        throw new Error(activityError.message || "Failed to update activity")
+      }
 
       const existingScheduleIds = activity.schedules.map((s) => s.id)
       const currentScheduleIds = schedules.filter((s) => s.id).map((s) => s.id)
 
       const schedulesToDelete = existingScheduleIds.filter((id) => !currentScheduleIds.includes(id))
       if (schedulesToDelete.length > 0) {
-        const { error: deleteError } = await supabase.from("activity_schedules").delete().in("id", schedulesToDelete)
+        const { error: deleteError } = await supabase
+          .from("activity_schedules")
+          .delete()
+          .in("id", schedulesToDelete)
+          .eq("activity_id", activity.id)
 
-        if (deleteError) throw deleteError
+        if (deleteError) {
+          console.error("Supabase schedule delete error:", deleteError)
+          throw new Error(deleteError.message || "Failed to delete schedules")
+        }
       }
 
       for (const schedule of schedules) {
@@ -161,11 +187,14 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
               end_time: schedule.end_time,
               is_recurring: schedule.is_recurring,
               is_active: schedule.is_active,
-              updated_at: new Date().toISOString(),
             })
             .eq("id", schedule.id)
+            .eq("activity_id", activity.id)
 
-          if (updateError) throw updateError
+          if (updateError) {
+            console.error("Supabase schedule update error:", updateError)
+            throw new Error(updateError.message || "Failed to update schedule")
+          }
         } else {
           const { error: insertError } = await supabase.from("activity_schedules").insert({
             activity_id: activity.id,
@@ -173,18 +202,27 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
             start_time: schedule.start_time,
             end_time: schedule.end_time,
             is_recurring: schedule.is_recurring,
-            recurrence_pattern: "weekly",
             is_active: schedule.is_active,
           })
 
-          if (insertError) throw insertError
+          if (insertError) {
+            console.error("Supabase schedule insert error:", insertError)
+            throw new Error(insertError.message || "Failed to add schedule")
+          }
         }
       }
 
-      onActivityUpdated()
+      // Ensure parent reloads before closing
+      await Promise.resolve(onActivityUpdated && onActivityUpdated())
       onClose()
     } catch (error) {
       console.error("Error updating activity:", error)
+      // Optional: add a basic user-visible error
+      if (error instanceof Error) {
+        alert(error.message)
+      } else {
+        alert("Failed to save activity. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
@@ -394,8 +432,8 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id={`recurring-${index}`}
-                        checked={!!schedule.is_recurring}
-                        onCheckedChange={(checked) => updateSchedule(index, "is_recurring", Boolean(checked))}
+                        checked={schedule.is_recurring === true}
+                        onCheckedChange={(checked) => updateSchedule(index, "is_recurring", checked === true)}
                       />
                       <Label htmlFor={`recurring-${index}`} className="text-xs sm:text-sm">
                         Repeat weekly
@@ -405,8 +443,8 @@ export function EditActivityDialog({ isOpen, onClose, activity, onActivityUpdate
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id={`active-${index}`}
-                        checked={!!schedule.is_active}
-                        onCheckedChange={(checked) => updateSchedule(index, "is_active", Boolean(checked))}
+                        checked={schedule.is_active === true}
+                        onCheckedChange={(checked) => updateSchedule(index, "is_active", checked === true)}
                       />
                       <Label htmlFor={`active-${index}`} className="text-xs sm:text-sm">
                         Active

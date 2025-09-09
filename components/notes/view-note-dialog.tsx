@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Pin, Edit, Trash2, MoreHorizontal, Calendar, Clock, LinkIcon, Tag } from "lucide-react"
+import { Pin, Edit, Trash2, MoreHorizontal, Calendar, Clock, LinkIcon, Tag, Download } from "lucide-react"
 import { format } from "date-fns"
 
 interface Note {
@@ -102,6 +102,21 @@ export default function ViewNoteDialog({
 
   const handleTogglePin = () => {
     onTogglePin(note.id)
+  }
+
+  const handleDownloadTxt = () => {
+    const sanitize = (name: string) => name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80)
+    const timestamp = format(new Date(note.updated_at), "yyyyMMdd-HHmm")
+    const fileName = `${sanitize(note.title || "note")}-${timestamp}.txt`
+    const blob = new Blob([note.content || ""], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -226,6 +241,15 @@ export default function ViewNoteDialog({
               {note.content.length} characters • {note.tags.length} tags
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTxt}
+                className="flex-1 sm:flex-none text-xs sm:text-sm bg-transparent"
+              >
+                <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                Save .txt
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

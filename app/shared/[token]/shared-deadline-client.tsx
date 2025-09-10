@@ -284,6 +284,30 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
     }
   }
 
+  // Calendar helpers for Google Calendar and Outlook
+  const handleOpenGoogleCalendar = () => {
+    const start = new Date(deadline.due_date)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const fmt = (d: Date) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
+    const dates = `${fmt(start)}/${fmt(end)}`
+    const text = encodeURIComponent(deadline.title || "Deadline")
+    const details = encodeURIComponent(deadline.description || "")
+    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}&dates=${dates}`
+    window.open(url, "_blank")
+  }
+
+  const handleOpenOutlook = () => {
+    const start = new Date(deadline.due_date)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    const subject = encodeURIComponent(deadline.title || "Deadline")
+    const body = encodeURIComponent((deadline.description || "") + "\n\nAdded from DeadlineMate")
+    const startIso = encodeURIComponent(start.toISOString())
+    const endIso = encodeURIComponent(end.toISOString())
+    const url = `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${subject}&body=${body}&startdt=${startIso}&enddt=${endIso}&allday=false`
+    window.open(url, "_blank")
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
       {/* Header */}
@@ -489,6 +513,24 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
                     {sharedDeadline.expires_at ? format(new Date(sharedDeadline.expires_at), "PPP") : "Never"}
                   </span>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Add to Calendar */}
+            <Card className="bg-white border-gray-200">
+              <CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
+                <CardTitle className="text-lg flex items-center text-gray-900">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                  Add to Calendar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleOpenGoogleCalendar}>
+                  Add to Google Calendar
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleOpenOutlook}>
+                  Add to Outlook
+                </Button>
               </CardContent>
             </Card>
           </div>

@@ -21,6 +21,7 @@ import {
   Target,
   Plus,
   Calendar,
+  CalendarPlus,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -374,6 +375,41 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
     setSelectedDeadline(deadline)
     setIsDetailSheetOpen(true)
   }, [])
+
+  // Calendar helpers
+  const formatICSDate = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const yyyy = date.getUTCFullYear()
+    const mm = pad(date.getUTCMonth() + 1)
+    const dd = pad(date.getUTCDate())
+    const hh = pad(date.getUTCHours())
+    const min = pad(date.getUTCMinutes())
+    const ss = pad(date.getUTCSeconds())
+    return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`
+  }
+
+  const openGoogleCalendarForDeadline = (d: Deadline) => {
+    const start = new Date(d.due_date)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const fmt = (dt: Date) => `${dt.getUTCFullYear()}${pad(dt.getUTCMonth() + 1)}${pad(dt.getUTCDate())}T${pad(dt.getUTCHours())}${pad(dt.getUTCMinutes())}${pad(dt.getUTCSeconds())}Z`
+    const dates = `${fmt(start)}/${fmt(end)}`
+    const text = encodeURIComponent(d.title || "Deadline")
+    const details = encodeURIComponent(d.description || "")
+    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}&dates=${dates}`
+    window.open(url, "_blank")
+  }
+
+  const openOutlookForDeadline = (d: Deadline) => {
+    const start = new Date(d.due_date)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    const subject = encodeURIComponent(d.title || "Deadline")
+    const body = encodeURIComponent((d.description || "") + "\n\nAdded from DeadlineMate")
+    const startIso = encodeURIComponent(start.toISOString())
+    const endIso = encodeURIComponent(end.toISOString())
+    const url = `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${subject}&body=${body}&startdt=${startIso}&enddt=${endIso}&allday=false`
+    window.open(url, "_blank")
+  }
 
   // Get display name and avatar
   const displayName = currentProfile.full_name || currentProfile.email.split("@")[0] || "User"
@@ -841,6 +877,28 @@ export default function DashboardClient({ user, initialDeadlines = [], isDemoMod
                           <DropdownMenuItem onClick={(e) => handleShareClick(e, deadline)} className="hover:bg-blue-50 rounded-lg">
                             <Share2 className="w-4 h-4 mr-3 text-blue-600" />
                             Share
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              openGoogleCalendarForDeadline(deadline)
+                            }}
+                            className="hover:bg-gray-50 rounded-lg"
+                          >
+                            <CalendarPlus className="w-4 h-4 mr-3 text-gray-700" />
+                            Add to Google Calendar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              openOutlookForDeadline(deadline)
+                            }}
+                            className="hover:bg-gray-50 rounded-lg"
+                          >
+                            <Calendar className="w-4 h-4 mr-3 text-indigo-700" />
+                            Add to Outlook
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={(e) => handleEditClick(e, deadline)}

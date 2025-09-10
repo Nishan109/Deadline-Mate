@@ -70,11 +70,11 @@ export function NotificationBanner({ deadlines = [], isDemoMode = false }: Notif
         // Show notifications for:
         // 1. Overdue deadlines
         // 2. Due today
-        // 3. High priority due tomorrow
+        // 3. Due tomorrow (any priority)
         return (
           dueDateOnly < today || // Overdue
           dueDateOnly.getTime() === today.getTime() || // Due today
-          (deadline.priority === "high" && dueDateOnly.getTime() === tomorrow.getTime()) // High priority due tomorrow
+          dueDateOnly.getTime() === tomorrow.getTime() // Due tomorrow
         )
       })
       .sort((a, b) => {
@@ -103,7 +103,7 @@ export function NotificationBanner({ deadlines = [], isDemoMode = false }: Notif
 
     if (dueDateOnly < today) return "destructive" // Overdue
     if (dueDateOnly.getTime() === today.getTime()) return "default" // Due today
-    return "default" // Due tomorrow (high priority)
+    return "default" // Due tomorrow
   }
 
   const getNotificationStyles = (deadline: Deadline) => {
@@ -135,7 +135,7 @@ export function NotificationBanner({ deadlines = [], isDemoMode = false }: Notif
         "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-lg hover:shadow-xl transition-all duration-300",
       iconClass: "text-blue-600 bg-blue-100 p-2 rounded-full",
       badgeClass: "bg-blue-500 text-white",
-      badgeText: "HIGH PRIORITY",
+      badgeText: "DUE TOMORROW",
     }
   }
 
@@ -165,7 +165,7 @@ export function NotificationBanner({ deadlines = [], isDemoMode = false }: Notif
     if (dueDateOnly.getTime() === today.getTime()) {
       return `"${deadline.title}" is due today at ${timeString}`
     }
-    return `High priority: "${deadline.title}" is due tomorrow at ${timeString}`
+    return `"${deadline.title}" is due tomorrow at ${timeString}`
   }
 
   return (

@@ -89,11 +89,7 @@ export default function LandingPage() {
               Get Started Free
               <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
             </LoadingButton>
-            <a
-              href="https://youtu.be/24qRnJKcNMs?si=RBsRtvmw7_atwsyr"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://youtu.be/24qRnJKcNMs?si=RBsRtvmw7_atwsyr" target="_blank" rel="noopener noreferrer">
               <Button
                 variant="outline"
                 size="lg"
@@ -463,15 +459,19 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Basic notifications
+                    Email & in-app notifications
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Notes & quick links
+                    Organize notes with categories
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Smart timetable management
+                    Quick links & bookmarks
+                  </li>
+                  <li className="flex items-center text-sm sm:text-base">
+                    <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
+                    Smart time table with activities
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
@@ -505,19 +505,23 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Advanced analytics dashboard
+                    Advanced analytics & insights
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Smart timetable management
+                    Advanced time table management
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Shared deadlines & collaboration
+                    Share deadlines & team collaboration
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
-                    Advanced notes with categories
+                    Advanced notes with tags & colors
+                  </li>
+                  <li className="flex items-center text-sm sm:text-base">
+                    <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />
+                    Deadline search & smart filters
                   </li>
                   <li className="flex items-center text-sm sm:text-base">
                     <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 mr-3 flex-shrink-0" />

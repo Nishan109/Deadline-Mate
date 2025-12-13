@@ -81,5 +81,3 @@ export default function AddToMyDeadlinesButton({ token, deadline }: Props) {
     </div>
   )
 }
-
-

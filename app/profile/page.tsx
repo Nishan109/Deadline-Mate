@@ -3,7 +3,7 @@ import { ProfileManagement } from "@/components/profile-management"
 import { Target, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams: { upgrade?: string; reason?: string } }) {
   const supabase = await createClient()
 
   // Check if we're in demo mode
@@ -62,6 +62,9 @@ export default async function ProfilePage() {
     }
   }
 
+  const upgradeFeature = searchParams.upgrade
+  const upgradeReason = searchParams.reason ? decodeURIComponent(searchParams.reason) : null
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -90,7 +93,13 @@ export default async function ProfilePage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
-        <ProfileManagement user={user} profile={profile} isDemoMode={isDemoMode || !user || user.id === "demo-user"} />
+        <ProfileManagement
+          user={user}
+          profile={profile}
+          isDemoMode={isDemoMode || !user || user.id === "demo-user"}
+          upgradeFeature={upgradeFeature}
+          upgradeReason={upgradeReason}
+        />
       </main>
     </div>
   )

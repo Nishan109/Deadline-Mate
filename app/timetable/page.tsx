@@ -222,6 +222,35 @@ export default async function TimetablePage({ searchParams }: { searchParams: { 
     user = authUser
 
     try {
+      // Get user profile first to check tier
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("plan, plan_expiry_date")
+        .eq("id", authUser.id)
+        .single()
+
+      profile = userProfile
+
+      if (profile) {
+        const now = new Date()
+        const expiryDate = profile.plan_expiry_date ? new Date(profile.plan_expiry_date) : null
+
+        if (profile.plan === "pro" && expiryDate && expiryDate < now) {
+          // Pro plan expired, downgrade to free
+          await supabase.from("profiles").update({ plan: "free" }).eq("id", authUser.id)
+
+          profile.plan = "free"
+        }
+      }
+    } catch (profileError) {
+      console.error("Error fetching user profile:", profileError)
+    }
+
+    if (profile?.plan === "free") {
+      return redirect("/profile?upgrade=timetable&reason=Timetable+Management+is+a+Pro+feature")
+    }
+
+    try {
       // Get user's timetables
       const { data: userTimetables, error: timetablesError } = await supabase
         .from("timetables")
@@ -231,39 +260,79 @@ export default async function TimetablePage({ searchParams }: { searchParams: { 
         .order("created_at", { ascending: true })
 
       if (timetablesError && timetablesError.code !== "42P01") {
-        // 42P01 is "relation does not exist" error
         console.error("Error fetching timetables:", timetablesError)
       }
 
       timetables = userTimetables || []
 
-      // Get user profile
-      const { data: userProfile } = await supabase.from("profiles").select("*").eq("id", authUser.id).single()
-
-      profile = userProfile
-
       // If we have timetables, get activities and schedules
       if (timetables.length > 0) {
         const timetableIds = timetables.map((t) => t.id)
 
-        const { data: userActivities } = await supabase
+        const { data: userActivities, error: activitiesError } = await supabase
           .from("activities")
           .select("*")
           .in("timetable_id", timetableIds)
-          .order("name", { ascending: true })
+          .order("title", { ascending: true })
 
-        activities = userActivities || []
+        if (activitiesError) {
+          console.error("[v0] Error fetching activities:", activitiesError)
+        }
+
+        activities = (userActivities || []).map((activity) => ({
+          ...activity,
+          schedules: [],
+        }))
+
+        console.log("[v0] Fetched activities count:", activities.length)
 
         if (activities.length > 0) {
           const activityIds = activities.map((a) => a.id)
 
-          const { data: userSchedules } = await supabase
+          const { data: userSchedules, error: schedulesError } = await supabase
             .from("schedules")
             .select("*")
             .in("activity_id", activityIds)
             .order("day_of_week", { ascending: true })
 
-          schedules = userSchedules || []
+          if (schedulesError) {
+            console.error("[v0] Error fetching schedules:", schedulesError)
+            console.error("[v0] Schedules error details:", JSON.stringify(schedulesError))
+          }
+
+          console.log("[v0] Fetched schedules:", userSchedules?.length || 0)
+
+          if (userSchedules && userSchedules.length > 0) {
+            console.log("[v0] First schedule sample:", JSON.stringify(userSchedules[0]))
+          }
+
+          // Group schedules by activity_id
+          const schedulesByActivity = (userSchedules || []).reduce(
+            (acc, schedule) => {
+              if (!acc[schedule.activity_id]) {
+                acc[schedule.activity_id] = []
+              }
+              acc[schedule.activity_id].push(schedule)
+              return acc
+            },
+            {} as Record<string, any[]>,
+          )
+
+          // Map schedules to activities
+          activities = activities.map((activity) => {
+            const activitySchedules = schedulesByActivity[activity.id] || []
+            console.log(`[v0] Activity "${activity.title}" has ${activitySchedules.length} schedules`)
+            return {
+              ...activity,
+              schedules: activitySchedules,
+            }
+          })
+
+          console.log("[v0] Total activities with schedules attached:", activities.length)
+          console.log(
+            "[v0] Activities with non-empty schedules:",
+            activities.filter((a) => a.schedules.length > 0).length,
+          )
         }
       }
     } catch (error) {
@@ -301,14 +370,24 @@ export default async function TimetablePage({ searchParams }: { searchParams: { 
                 className="inline-flex items-center px-4 py-2 bg-white/70 backdrop-blur-sm border border-gray-200/50 shadow-sm text-sm font-medium rounded-xl text-gray-700 hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all duration-200"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
                 </svg>
                 Back to Dashboard
               </a>
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg shadow-lg">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
                   </svg>
                 </div>
                 <div>

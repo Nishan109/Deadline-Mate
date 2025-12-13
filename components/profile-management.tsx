@@ -18,7 +18,6 @@ import {
   Phone,
   Shield,
   Key,
-  Smartphone,
   Download,
   Trash2,
   Eye,
@@ -28,9 +27,13 @@ import {
   Info,
   Save,
   Camera,
+  CreditCard,
+  Lock,
+  Zap,
 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { LoadingSpinner } from "@/components/loading-spinner"
+import { SubscriptionManagement } from "@/components/subscription-management" // Assuming SubscriptionManagement component exists
 
 interface UserProfile {
   id: string
@@ -48,9 +51,17 @@ interface ProfileManagementProps {
   user: any
   profile?: UserProfile | null
   isDemoMode?: boolean
+  upgradeFeature?: string
+  upgradeReason?: string
 }
 
-export function ProfileManagement({ user, profile, isDemoMode = false }: ProfileManagementProps) {
+export function ProfileManagement({
+  user,
+  profile,
+  isDemoMode = false,
+  upgradeFeature,
+  upgradeReason,
+}: ProfileManagementProps) {
   const [activeTab, setActiveTab] = useState("profile")
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -91,7 +102,10 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
         avatar_url: profile.avatar_url || "",
       })
     }
-  }, [profile])
+    if (upgradeFeature) {
+      setActiveTab("subscription")
+    }
+  }, [profile, upgradeFeature])
 
   const handleProfileSave = async () => {
     if (isDemoMode) {
@@ -261,6 +275,16 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
 
   return (
     <div className="max-w-5xl mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+      {upgradeFeature && (
+        <Alert className="border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50">
+          <Zap className="h-5 w-5 text-purple-600" />
+          <AlertDescription className="text-sm sm:text-base text-purple-900 ml-2">
+            <strong>Upgrade to Pro!</strong> {upgradeReason || "This feature is available in the Pro plan."} Scroll down
+            to upgrade your account and unlock all premium features.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 p-4 sm:p-6 bg-white rounded-lg border border-gray-200">
         <div className="relative flex-shrink-0">
@@ -327,7 +351,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4 sm:mb-6 h-auto p-1">
+        <TabsList className="grid w-full grid-cols-4 mb-4 sm:mb-6 h-auto p-1">
           <TabsTrigger value="profile" className="text-xs sm:text-sm lg:text-base py-2 sm:py-3">
             <User className="w-4 h-4 mr-1 sm:mr-2" />
             <span className="hidden xs:inline">Profile</span>
@@ -342,6 +366,14 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
             <Download className="w-4 h-4 mr-1 sm:mr-2" />
             <span className="hidden sm:inline">Data & Privacy</span>
             <span className="sm:hidden">Data</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="subscription"
+            className={`text-xs sm:text-sm lg:text-base py-2 sm:py-3 ${upgradeFeature ? "bg-purple-100 text-purple-700" : ""}`}
+          >
+            <CreditCard className="w-4 h-4 mr-1 sm:mr-2" />
+            <span className="hidden xs:inline">Subscription</span>
+            <span className="xs:hidden">Plan</span>
           </TabsTrigger>
         </TabsList>
 
@@ -366,8 +398,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
                   <Input
                     id="full_name"
                     placeholder="Enter your full name"
-                    value={profileData.full_name}
-                    onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
+                    defaultValue={profileData.full_name}
                     className="text-sm sm:text-base h-10 sm:h-11"
                   />
                 </div>
@@ -378,8 +409,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
                   <Input
                     id="phone"
                     placeholder="Enter your phone number"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                    defaultValue={profileData.phone}
                     className="text-sm sm:text-base h-10 sm:h-11"
                   />
                 </div>
@@ -391,8 +421,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
                 <Input
                   id="location"
                   placeholder="Enter your location"
-                  value={profileData.location}
-                  onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
+                  defaultValue={profileData.location}
                   className="text-sm sm:text-base h-10 sm:h-11"
                 />
               </div>
@@ -403,8 +432,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
                 <Textarea
                   id="bio"
                   placeholder="Tell us about yourself"
-                  value={profileData.bio}
-                  onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+                  defaultValue={profileData.bio}
                   rows={4}
                   className="text-sm sm:text-base min-h-[100px] sm:min-h-[120px] resize-none"
                 />
@@ -437,7 +465,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
           <Card>
             <CardHeader className="pb-4 sm:pb-6">
               <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                <Key className="w-5 h-5" />
+                <Shield className="w-5 h-5" />
                 Change Password
               </CardTitle>
               <CardDescription className="text-sm sm:text-base">
@@ -560,7 +588,7 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-4 border border-gray-200 rounded-lg">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <Smartphone className="w-4 h-4 text-gray-600" />
+                    <Lock className="w-4 h-4 text-gray-600" />
                     <span className="text-sm sm:text-base font-medium">Two-Factor Authentication</span>
                   </div>
                   <p className="text-xs sm:text-sm text-gray-600">Add an extra layer of security to your account</p>
@@ -613,32 +641,9 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                <div className="flex-1">
-                  <p className="text-sm sm:text-base text-gray-600 mb-4">
-                    Export includes your profile information, deadlines, notes, and account settings. The data will be
-                    provided in JSON format.
-                  </p>
-                </div>
-                <Button
-                  onClick={exportData}
-                  disabled={isLoading}
-                  variant="outline"
-                  className="w-full sm:w-auto text-sm sm:text-base h-10 sm:h-11 px-6 sm:px-8 bg-transparent"
-                >
-                  {isLoading ? (
-                    <>
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Data
-                    </>
-                  )}
-                </Button>
-              </div>
+              <p className="text-sm sm:text-base text-gray-600">
+                Export includes your profile information, deadlines, notes, and account settings in JSON format.
+              </p>
             </CardContent>
           </Card>
 
@@ -671,6 +676,11 @@ export function ProfileManagement({ user, profile, isDemoMode = false }: Profile
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Subscription Tab */}
+        <TabsContent value="subscription" className="space-y-4 sm:space-y-6">
+          <SubscriptionManagement user={user} isDemoMode={isDemoMode} />
         </TabsContent>
       </Tabs>
     </div>

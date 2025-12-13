@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,9 +16,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, CheckCircle, LinkIcon } from "lucide-react"
+import { Calendar, Clock, CheckCircle, LinkIcon, AlertCircle } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { LoadingSpinner } from "@/components/loading-spinner"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { getEffectivePlan } from "@/utils/plan-helpers"
 
 interface Deadline {
   id: string
@@ -40,6 +42,8 @@ interface AddDeadlineDialogProps {
   onRefresh: () => Promise<void>
   userId: string
   isDemoMode?: boolean
+  userPlan?: string
+  deadlineCount?: number
 }
 
 export default function AddDeadlineDialog({
@@ -49,10 +53,17 @@ export default function AddDeadlineDialog({
   onRefresh,
   userId,
   isDemoMode = false,
+  userPlan = "free",
+  deadlineCount = 0,
 }: AddDeadlineDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [userPlanData, setUserPlanData] = useState(userPlan)
+  const [deadlineCountData, setDeadlineCountData] = useState(deadlineCount)
+  const FREE_TIER_LIMIT = 5
+  const canAddDeadline = userPlanData === "pro" || deadlineCountData < FREE_TIER_LIMIT
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -62,6 +73,30 @@ export default function AddDeadlineDialog({
     category: "",
     project_link: "",
   })
+
+  useEffect(() => {
+    if (isOpen && !isDemoMode) {
+      const fetchUserData = async () => {
+        try {
+          const planStatus = await getEffectivePlan(userId)
+          setUserPlanData(planStatus.plan)
+
+          const supabase = createClient()
+          const { data: deadlines } = await supabase
+            .from("deadlines")
+            .select("id")
+            .eq("user_id", userId)
+            .neq("status", "completed")
+
+          setDeadlineCountData(deadlines?.length || 0)
+        } catch (error) {
+          console.error("Error fetching user data:", error)
+        }
+      }
+
+      fetchUserData()
+    }
+  }, [isOpen, userId, isDemoMode])
 
   const resetForm = () => {
     setFormData({
@@ -79,14 +114,17 @@ export default function AddDeadlineDialog({
     e.preventDefault()
     e.stopPropagation()
 
+    if (!canAddDeadline) {
+      alert("You've reached the 5 deadline limit on the Free plan. Upgrade to Pro for unlimited deadlines!")
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      // Combine date and time
       const dueDateTime = new Date(`${formData.due_date}T${formData.due_time || "23:59"}`)
 
       if (isDemoMode) {
-        // In demo mode, create a mock deadline
         const newDeadline: Deadline = {
           id: `demo-${Date.now()}`,
           title: formData.title,
@@ -104,7 +142,6 @@ export default function AddDeadlineDialog({
         setShowSuccess(true)
         resetForm()
 
-        // Auto-refresh after success
         setTimeout(async () => {
           setIsRefreshing(true)
           await onRefresh()
@@ -139,8 +176,8 @@ export default function AddDeadlineDialog({
         onAdd(data)
         setShowSuccess(true)
         resetForm()
+        setDeadlineCountData((prev) => prev + 1)
 
-        // Auto-refresh after success
         setTimeout(async () => {
           setIsRefreshing(true)
           await onRefresh()
@@ -183,6 +220,19 @@ export default function AddDeadlineDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {userPlanData === "free" && (
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 text-sm">
+              <strong>Free Plan:</strong> {deadlineCountData}/{FREE_TIER_LIMIT} deadlines used.{" "}
+              <a href="/profile" className="underline font-semibold hover:text-amber-900">
+                Upgrade to Pro
+              </a>{" "}
+              for unlimited deadlines.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {showSuccess && (
           <div className="flex items-center justify-center p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg">
             <CheckCircle className="w-5 h-5 text-emerald-600 mr-2 flex-shrink-0" />
@@ -205,7 +255,7 @@ export default function AddDeadlineDialog({
                 value={formData.title}
                 onChange={(e) => handleInputChange("title", e.target.value)}
                 required
-                disabled={isLoading || isRefreshing}
+                disabled={isLoading || isRefreshing || !canAddDeadline}
                 className="w-full"
               />
             </div>
@@ -351,9 +401,14 @@ export default function AddDeadlineDialog({
               type="submit"
               onClick={handleSubmit}
               className="bg-emerald-500 hover:bg-emerald-600 w-full sm:w-auto"
-              disabled={isLoading || isRefreshing || showSuccess}
+              disabled={isLoading || isRefreshing || showSuccess || !canAddDeadline}
             >
-              {isLoading ? (
+              {!canAddDeadline ? (
+                <>
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Limit Reached
+                </>
+              ) : isLoading ? (
                 <>
                   <LoadingSpinner size="sm" />
                   <span className="ml-2">Creating...</span>

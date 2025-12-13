@@ -131,6 +131,7 @@ export function TimetableClient({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isDemo, setIsDemo] = useState(isDemoMode || !user?.id)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -211,98 +212,95 @@ export function TimetableClient({
 
   useEffect(() => {
     const initializeTimetables = async () => {
-      console.log("[v0] Initializing timetables with user:", user?.id, "demo mode:", isDemo)
-
-      if (user?.id && initialTimetables.length > 0) {
-        console.log("[v0] Using initial timetables data:", initialTimetables.length)
-        setTimetables(initialTimetables)
-        setIsDemo(false)
-
-        if (initialActivities.length > 0) {
-          console.log("[v0] Using initial activities data:", initialActivities.length)
-          setActivities(initialActivities)
-        } else {
-          await loadActivitiesFromDatabase()
-        }
-
-        setLoading(false)
-        return
-      }
-
-      if (!user?.id) {
-        console.log("[v0] No authenticated user, using demo mode")
-        setIsDemo(true)
-        setActivities(demoActivities)
-        setLoading(false)
-        return
-      }
-
       try {
-        console.log("[v0] Loading timetables from database for user:", user.id)
+        console.log("[v0] Initializing timetables with user:", user?.id, "demo mode:", isDemo)
+        setError(null)
 
-        const { data, error } = await supabase
-          .from("timetables")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-
-        if (error) {
-          console.log("[v0] Database not available, using demo mode:", error)
-          setIsDemo(true)
-          setActivities(demoActivities)
+        if (initialTimetables.length > 0 || initialActivities.length > 0) {
+          console.log("[v0] Using server-provided initial data")
+          setTimetables(initialTimetables)
+          setActivities(initialActivities)
+          setIsDemo(false)
           setLoading(false)
           return
         }
 
-        if (data && data.length > 0) {
-          console.log("[v0] Loaded timetables from database:", data.length)
-          setTimetables(data)
-          setIsDemo(false)
-          await loadActivitiesFromDatabase()
-        } else {
+        // If no initial data but user is authenticated, try to load from database
+        if (user?.id && !isDemoMode) {
+          console.log("[v0] Loading from database for authenticated user")
           try {
-            const { data: newTimetable, error: createError } = await supabase
+            const { data: userTimetables, error: timetablesError } = await supabase
               .from("timetables")
-              .insert({
-                user_id: user.id,
-                name: "My Timetable",
-                description: "Default timetable",
-                is_active: true,
-              })
-              .select()
-              .single()
+              .select("*")
+              .eq("user_id", user.id)
+              .eq("is_active", true)
+              .order("created_at", { ascending: false })
 
-            if (createError) {
-              console.log("[v0] Cannot create timetable (RLS policy), using demo mode:", createError)
-              setIsDemo(true)
-              setActivities(demoActivities)
-            } else {
-              console.log("[v0] Created new timetable:", newTimetable)
-              setTimetables([newTimetable])
-              setIsDemo(false)
+            if (timetablesError && timetablesError.code !== "42P01") {
+              console.error("[v0] Error fetching timetables:", timetablesError)
+              throw timetablesError
             }
-          } catch (createError) {
-            console.log("[v0] RLS policy violation, using demo mode:", createError)
-            setIsDemo(true)
-            setActivities(demoActivities)
+
+            if (userTimetables && userTimetables.length > 0) {
+              setTimetables(userTimetables)
+
+              // Load activities for these timetables
+              const timetableIds = userTimetables.map((t) => t.id)
+              const { data: userActivities, error: activitiesError } = await supabase
+                .from("activities")
+                .select("*")
+                .in("timetable_id", timetableIds)
+                .order("title", { ascending: true })
+
+              if (!activitiesError && userActivities) {
+                setActivities(userActivities)
+              }
+
+              setIsDemo(false)
+              setLoading(false)
+              return
+            }
+          } catch (dbError) {
+            console.log("[v0] Database load failed, will use demo data:", dbError)
+            // Fall through to demo mode
           }
         }
-      } catch (error) {
-        console.log("[v0] Database error, using demo mode:", error)
+
+        // Fallback to demo mode
+        console.log("[v0] Using demo mode")
         setIsDemo(true)
         setActivities(demoActivities)
+        setLoading(false)
+      } catch (err) {
+        console.error("[v0] Initialization error:", err)
+        setError(err instanceof Error ? err.message : "Failed to load timetable")
+        setIsDemo(true)
+        setActivities(demoActivities)
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
     initializeTimetables()
-  }, [user, initialTimetables, initialActivities])
+  }, [user?.id, isDemoMode, initialTimetables, initialActivities])
 
   useEffect(() => {
     if (activities.length > 0) {
       console.log("[v0] Calculating current and next activities from", activities.length, "activities")
-      loadCurrentAndNextActivity()
+      activities.forEach((activity, index) => {
+        console.log(`[v0] Activity ${index + 1}: "${activity.title}" - Schedules:`, activity.schedules?.length || 0)
+        if (activity.schedules && activity.schedules.length > 0) {
+          activity.schedules.forEach((schedule, sIndex) => {
+            console.log(
+              `  Schedule ${sIndex + 1}: Day ${schedule.day_of_week}, ${schedule.start_time}-${schedule.end_time}, Active: ${schedule.is_active}`,
+            )
+          })
+        }
+      })
+      try {
+        loadCurrentAndNextActivity()
+      } catch (error) {
+        console.error("[v0] Error calculating current/next activity:", error)
+      }
     }
   }, [activities])
 
@@ -327,7 +325,7 @@ export function TimetableClient({
         .from("activities")
         .select(`
           *,
-          schedules:activity_schedules(*)
+          schedules(*)
         `)
         .eq("timetable_id", currentTimetable.id)
         .order("created_at", { ascending: false })
@@ -338,7 +336,11 @@ export function TimetableClient({
       }
 
       console.log("[v0] Loaded activities from database:", data?.length || 0)
-      setActivities(data || [])
+      const activitiesWithSchedules = (data || []).map((activity) => ({
+        ...activity,
+        schedules: Array.isArray(activity.schedules) ? activity.schedules : [],
+      }))
+      setActivities(activitiesWithSchedules)
     } catch (error) {
       console.log("[v0] Error loading activities:", error)
     }
@@ -369,6 +371,7 @@ export function TimetableClient({
     const currentDayOfWeek = now.getDay()
 
     const todaySchedules = activities
+      .filter((activity) => activity.schedules && Array.isArray(activity.schedules))
       .flatMap((activity) =>
         activity.schedules
           .filter((schedule) => schedule.day_of_week === currentDayOfWeek && schedule.is_active)
@@ -428,6 +431,7 @@ export function TimetableClient({
       for (let daysAhead = 1; daysAhead <= 7; daysAhead++) {
         const checkDay = (currentDayOfWeek + daysAhead) % 7
         const daySchedules = activities
+          .filter((activity) => activity.schedules && Array.isArray(activity.schedules))
           .flatMap((activity) =>
             activity.schedules
               .filter((schedule) => schedule.day_of_week === checkDay && schedule.is_active)
@@ -471,11 +475,22 @@ export function TimetableClient({
   }
 
   const filteredActivities = useMemo(() => {
-    return activities.filter((activity) => {
-      const hasScheduleForDay = activity.schedules?.some(
-        (schedule) => schedule.day_of_week === selectedDay && schedule.is_active,
-      ) || false
-      if (!hasScheduleForDay) return false
+    console.log("[v0] Filtering activities for day:", selectedDay, "Total activities:", activities.length)
+
+    const filtered = activities.filter((activity) => {
+      if (!activity.schedules || !Array.isArray(activity.schedules)) {
+        console.log(`[v0] Activity "${activity.title}" has no schedules array`)
+        return false
+      }
+
+      const hasScheduleForDay = activity.schedules.some(
+        (schedule) => schedule.day_of_week === selectedDay && schedule.is_active !== false,
+      )
+
+      if (!hasScheduleForDay) {
+        console.log(`[v0] Activity "${activity.title}" has no schedule for day ${selectedDay}`)
+        return false
+      }
 
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
@@ -495,6 +510,9 @@ export function TimetableClient({
 
       return true
     })
+
+    console.log("[v0] Filtered activities count:", filtered.length)
+    return filtered
   }, [activities, selectedDay, searchQuery, activeFilter])
 
   const categories = useMemo(() => {
@@ -549,9 +567,14 @@ export function TimetableClient({
       counts.set(key, (counts.get(key) || 0) + 1)
     })
     const tabs: { label: string; value: string; count: number }[] = []
-    const totalForDay = activities.filter((a) =>
-      a.schedules?.some((s) => s.day_of_week === selectedDay && s.is_active) || false,
+
+    const totalForDay = activities.filter(
+      (a) =>
+        a.schedules &&
+        Array.isArray(a.schedules) &&
+        a.schedules.some((s) => s.day_of_week === selectedDay && s.is_active !== false),
     ).length
+
     tabs.push({ label: "All", value: "all", count: totalForDay })
     counts.forEach((count, key) => {
       const label = key === "uncategorized" ? "Uncategorized" : key.charAt(0).toUpperCase() + key.slice(1)
@@ -561,12 +584,15 @@ export function TimetableClient({
         count: activities.filter(
           (a) =>
             (a.category || "uncategorized").toLowerCase() === key.toLowerCase() &&
-            (a.schedules?.some((s) => s.day_of_week === selectedDay && s.is_active) || false),
+            a.schedules &&
+            Array.isArray(a.schedules) &&
+            a.schedules.some((s) => s.day_of_week === selectedDay && s.is_active !== false),
         ).length,
       })
     })
+
+    console.log("[v0] Computed tabs:", tabs)
     return tabs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activities, selectedDay])
 
   const handlePrevDay = () => setSelectedDay((d) => (d - 1 + 7) % 7)
@@ -584,10 +610,30 @@ export function TimetableClient({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your timetable...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-emerald-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading your timetable...</p>
+          <p className="text-sm text-gray-500 mt-2">This may take a moment</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !isDemo) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 0v2" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Timetable</h3>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <Button onClick={() => window.location.reload()} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            Try Again
+          </Button>
         </div>
       </div>
     )
@@ -610,7 +656,7 @@ export function TimetableClient({
                 <p className="text-sm text-gray-600 mt-1">Organize your day with precision and clarity</p>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -647,10 +693,10 @@ export function TimetableClient({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex items-center bg-white/70 backdrop-blur-sm rounded-lg border border-gray-200/50 p-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handlePrevDay} 
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePrevDay}
                     className="hover:bg-gray-100/70"
                     aria-label="Previous day"
                   >
@@ -659,26 +705,26 @@ export function TimetableClient({
                   <div className="px-4 py-2">
                     <span className="text-sm font-semibold text-gray-900">{formatSelectedDayDate()}</span>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handleNextDay} 
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleNextDay}
                     className="hover:bg-gray-100/70"
                     aria-label="Next day"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={jumpToToday} 
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={jumpToToday}
                   className="bg-white/70 backdrop-blur-sm border-gray-200/50 hover:bg-white"
                 >
                   Today
                 </Button>
               </div>
-              
+
               <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500 bg-white/50 backdrop-blur-sm rounded-lg px-3 py-2 border border-gray-200/30">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                 <span>
@@ -720,11 +766,11 @@ export function TimetableClient({
                       <span className="lg:hidden font-medium">{day.short}</span>
                       <span className="hidden lg:inline font-medium">{day.full}</span>
                       {isToday(day.value) && (
-                        <span className={`mt-1 sm:mt-0 sm:ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          selectedDay === day.value 
-                            ? "bg-white/20 text-white" 
-                            : "bg-emerald-100 text-emerald-700"
-                        }`}>
+                        <span
+                          className={`mt-1 sm:mt-0 sm:ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            selectedDay === day.value ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
                           Today
                         </span>
                       )}
@@ -808,9 +854,7 @@ export function TimetableClient({
                     <span>{tab.label}</span>
                     <span
                       className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        activeFilter === tab.value 
-                          ? "bg-white/20 text-white" 
-                          : "bg-gray-100 text-gray-600"
+                        activeFilter === tab.value ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {tab.count}
@@ -854,9 +898,7 @@ export function TimetableClient({
                   </div>
 
                   {activity.description && (
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-2 leading-relaxed">
-                      {activity.description}
-                    </p>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2 leading-relaxed">{activity.description}</p>
                   )}
 
                   {activity.location && (
@@ -869,41 +911,55 @@ export function TimetableClient({
                   <div className="space-y-3">
                     <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Schedule</h4>
                     {activity.schedules
-                      .filter(schedule => schedule.day_of_week === selectedDay && schedule.is_active)
+                      .filter((schedule) => schedule.day_of_week === selectedDay && schedule.is_active)
                       .slice(0, 3)
                       .map((schedule, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50/50 to-white/50 rounded-lg border border-gray-100/50">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${
-                            activity.color === 'green' ? 'bg-green-400' :
-                            activity.color === 'blue' ? 'bg-blue-400' :
-                            activity.color === 'purple' ? 'bg-purple-400' :
-                            activity.color === 'red' ? 'bg-red-400' :
-                            activity.color === 'yellow' ? 'bg-yellow-400' :
-                            activity.color === 'orange' ? 'bg-orange-400' :
-                            activity.color === 'pink' ? 'bg-pink-400' :
-                            activity.color === 'indigo' ? 'bg-indigo-400' :
-                            'bg-gray-400'
-                          }`}></div>
-                          <span className="text-sm font-medium text-gray-700">
-                            {DAYS_OF_WEEK.find((d) => d.value === schedule.day_of_week)?.short}
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50/50 to-white/50 rounded-lg border border-gray-100/50"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-3 h-3 rounded-full ${
+                                activity.color === "green"
+                                  ? "bg-green-400"
+                                  : activity.color === "blue"
+                                    ? "bg-blue-400"
+                                    : activity.color === "purple"
+                                      ? "bg-purple-400"
+                                      : activity.color === "red"
+                                        ? "bg-red-400"
+                                        : activity.color === "yellow"
+                                          ? "bg-yellow-400"
+                                          : activity.color === "orange"
+                                            ? "bg-orange-400"
+                                            : activity.color === "pink"
+                                              ? "bg-pink-400"
+                                              : activity.color === "indigo"
+                                                ? "bg-indigo-400"
+                                                : "bg-gray-400"
+                              }`}
+                            ></div>
+                            <span className="text-sm font-medium text-gray-700">
+                              {DAYS_OF_WEEK.find((d) => d.value === schedule.day_of_week)?.short}
+                            </span>
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
                           </span>
                         </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
-                        </span>
-                      </div>
-                    ))}
-                    
-                    {activity.schedules.filter(s => s.day_of_week === selectedDay && s.is_active).length === 0 && (
+                      ))}
+
+                    {activity.schedules.filter((s) => s.day_of_week === selectedDay && s.is_active).length === 0 && (
                       <div className="text-center py-4 text-gray-500 text-sm">
-                        No schedule for {DAYS_OF_WEEK.find(d => d.value === selectedDay)?.full}
+                        No schedule for {DAYS_OF_WEEK.find((d) => d.value === selectedDay)?.full}
                       </div>
                     )}
-                    
-                    {activity.schedules.filter(s => s.day_of_week === selectedDay && s.is_active).length > 3 && (
+
+                    {activity.schedules.filter((s) => s.day_of_week === selectedDay && s.is_active).length > 3 && (
                       <div className="text-center text-xs text-gray-500">
-                        +{activity.schedules.filter(s => s.day_of_week === selectedDay && s.is_active).length - 3} more
+                        +{activity.schedules.filter((s) => s.day_of_week === selectedDay && s.is_active).length - 3}{" "}
+                        more
                       </div>
                     )}
                   </div>
@@ -921,10 +977,9 @@ export function TimetableClient({
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No Activities Found</h3>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                  {searchQuery || activeFilter !== "all" 
+                  {searchQuery || activeFilter !== "all"
                     ? "Try adjusting your search or filter criteria to find activities."
-                    : `No activities scheduled for ${DAYS_OF_WEEK.find(d => d.value === selectedDay)?.full}. Start by adding your first activity.`
-                  }
+                    : `No activities scheduled for ${DAYS_OF_WEEK.find((d) => d.value === selectedDay)?.full}. Start by adding your first activity.`}
                 </p>
                 <Button
                   onClick={() => setIsAddDialogOpen(true)}

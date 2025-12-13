@@ -92,6 +92,14 @@ export default async function AnalyticsPage() {
     return redirect("/auth")
   }
 
+  // Fetch user profile to check tier early
+  const { data: userProfile } = await supabase.from("profiles").select("plan").eq("id", authUser.id).single()
+
+  // Redirect free users to profile with upgrade reason
+  if (userProfile?.plan === "free") {
+    return redirect("/profile?upgrade=analytics&reason=Analytics+and+Insights+are+Pro+features")
+  }
+
   // Fetch user's deadlines
   const { data: deadlines, error } = await supabase
     .from("deadlines")

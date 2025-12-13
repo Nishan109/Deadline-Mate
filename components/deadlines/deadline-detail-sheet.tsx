@@ -1,10 +1,8 @@
 "use client"
-
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Calendar,
   Clock,
@@ -12,7 +10,6 @@ import {
   AlertCircle,
   Star,
   ExternalLink,
-  X,
   Edit,
   Trash2,
   Share2,
@@ -20,12 +17,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { isPast, isToday, isThisWeek } from "date-fns"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface Deadline {
   id: string
@@ -46,6 +38,7 @@ interface DeadlineDetailSheetProps {
   onDelete?: (deadline: Deadline) => void
   onShare?: (deadline: Deadline) => void
   onToggleStatus?: (deadlineId: string) => void
+  userPlan?: string
 }
 
 export default function DeadlineDetailSheet({
@@ -56,6 +49,7 @@ export default function DeadlineDetailSheet({
   onDelete,
   onShare,
   onToggleStatus,
+  userPlan = "free",
 }: DeadlineDetailSheetProps) {
   if (!deadline) return null
 
@@ -140,6 +134,10 @@ export default function DeadlineDetailSheet({
   }
 
   const handleShare = () => {
+    if (userPlan === "free") {
+      alert("Sharing is a Pro feature. Upgrade to Pro to share deadlines with others!")
+      return
+    }
     if (onShare) {
       onShare(deadline)
     }
@@ -151,9 +149,7 @@ export default function DeadlineDetailSheet({
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto px-3 sm:px-6 py-6">
         <SheetHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl font-bold text-gray-900">
-              Deadline Details
-            </SheetTitle>
+            <SheetTitle className="text-xl font-bold text-gray-900">Deadline Details</SheetTitle>
             <div className="flex items-center">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -166,10 +162,19 @@ export default function DeadlineDetailSheet({
                     <Edit className="w-4 h-4 mr-3 text-emerald-600" />
                     Edit
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleShare} className="hover:bg-blue-50 rounded-lg">
-                    <Share2 className="w-4 h-4 mr-3 text-blue-600" />
-                    Share
-                  </DropdownMenuItem>
+                  {userPlan === "pro" ? (
+                    <DropdownMenuItem onClick={handleShare} className="hover:bg-blue-50 rounded-lg">
+                      <Share2 className="w-4 h-4 mr-3 text-blue-600" />
+                      Share
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={handleShare} className="hover:bg-amber-50 rounded-lg opacity-60">
+                      <Share2 className="w-4 h-4 mr-3 text-amber-600" />
+                      <span>
+                        Share <Badge className="ml-2 text-xs bg-amber-500">Pro</Badge>
+                      </span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={handleDelete} className="text-red-600 hover:bg-red-50 rounded-lg">
                     <Trash2 className="w-4 h-4 mr-3" />
                     Delete
@@ -184,11 +189,16 @@ export default function DeadlineDetailSheet({
           {/* Main Card */}
           <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-gray-50">
             {/* Priority indicator bar */}
-            <div className={`absolute top-0 left-0 w-1 h-full ${
-              deadline.priority === "high" ? "bg-red-500" : 
-              deadline.priority === "medium" ? "bg-orange-500" : "bg-green-500"
-            } rounded-l-2xl`} />
-            
+            <div
+              className={`absolute top-0 left-0 w-1 h-full ${
+                deadline.priority === "high"
+                  ? "bg-red-500"
+                  : deadline.priority === "medium"
+                    ? "bg-orange-500"
+                    : "bg-green-500"
+              } rounded-l-2xl`}
+            />
+
             <CardHeader className="p-6 pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2 sm:gap-3">
                 <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
@@ -200,21 +210,19 @@ export default function DeadlineDetailSheet({
                         : "border-gray-300 hover:border-emerald-500 hover:bg-emerald-50"
                     }`}
                   >
-                    {deadline.status === "completed" && (
-                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                    )}
+                    {deadline.status === "completed" && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                   </button>
                   <div className="min-w-0 overflow-hidden">
-                    <CardTitle className={`text-lg sm:text-2xl font-bold leading-tight truncate ${
-                      deadline.status === "completed" 
-                        ? "line-through text-gray-500" 
-                        : "text-gray-900"
-                    }`}>
+                    <CardTitle
+                      className={`text-lg sm:text-2xl font-bold leading-tight truncate ${
+                        deadline.status === "completed" ? "line-through text-gray-500" : "text-gray-900"
+                      }`}
+                    >
                       {deadline.title}
                     </CardTitle>
                   </div>
                 </div>
-                
+
                 {/* Status badge */}
                 <div className="flex-shrink-0 self-start sm:self-center mt-1 sm:mt-0">
                   {getDeadlineBadge(deadline.due_date, deadline.status)}
@@ -224,8 +232,8 @@ export default function DeadlineDetailSheet({
               {/* Category and Priority badges */}
               <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 sm:mb-6 mt-2 sm:mt-3">
                 {deadline.category && (
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className="text-xs sm:text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 py-1 sm:py-1.5 max-w-full overflow-hidden"
                   >
                     <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-500 rounded-full mr-1.5 sm:mr-2 flex-shrink-0" />

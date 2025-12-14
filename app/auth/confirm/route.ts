@@ -1,5 +1,6 @@
-import { createClient } from "@/utils/supabase/server"
+import { createServerClient } from "@supabase/ssr"
 import { type NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -9,13 +10,33 @@ export async function GET(request: NextRequest) {
 
   console.log("[v0] Auth confirm - token_hash:", token_hash ? "present" : "missing")
   console.log("[v0] Auth confirm - type:", type)
-  console.log("[v0] Auth confirm - next:", next)
-  console.log("[v0] Auth confirm - full URL:", request.url)
 
   const redirectUrl = new URL(request.url)
+  const cookieStore = await cookies()
 
   if (token_hash && type) {
-    const supabase = await createClient()
+    const supabaseResponse = NextResponse.next({
+      request,
+    })
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+              // Also set in response
+              supabaseResponse.cookies.set(name, value, options)
+            })
+          },
+        },
+      },
+    )
 
     const { data, error } = await supabase.auth.verifyOtp({
       type: type as any,
@@ -34,22 +55,25 @@ export async function GET(request: NextRequest) {
       if (type === "recovery") {
         console.log("[v0] Auth confirm - Recovery type detected, redirecting to reset-password")
         redirectUrl.pathname = "/auth/reset-password"
-        redirectUrl.search = "" // Clear all query params
-
-        const response = NextResponse.redirect(redirectUrl)
-
-        // Ensure session cookies are set in the response
-        return response
+      } else {
+        console.log("[v0] Auth confirm - Standard type, redirecting to:", next)
+        redirectUrl.pathname = next
       }
 
-      console.log("[v0] Auth confirm - Standard type, redirecting to:", next)
-      redirectUrl.pathname = next
       redirectUrl.search = ""
-      return NextResponse.redirect(redirectUrl)
+
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+
+      // Copy all cookies from the supabase response to the redirect response
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+      })
+
+      return redirectResponse
     } else {
       console.error("[v0] Auth confirm - Verification failed:", error?.message || "No session created")
       redirectUrl.pathname = "/auth"
-      redirectUrl.search = `?message=${encodeURIComponent("Could not verify email. Please try again.")}`
+      redirectUrl.search = `?message=${encodeURIComponent(error?.message || "Could not verify email. Please try again.")}`
       return NextResponse.redirect(redirectUrl)
     }
   } else {

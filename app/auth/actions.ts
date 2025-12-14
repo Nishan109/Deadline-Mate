@@ -122,3 +122,35 @@ export async function signOut() {
   revalidatePath("/", "layout")
   redirect("/auth")
 }
+
+export async function resetPassword(formData: FormData) {
+  const supabase = await createClient()
+
+  const password = formData.get("password") as string
+  const confirmPassword = formData.get("confirmPassword") as string
+
+  // Validation
+  if (!password || !confirmPassword) {
+    redirect("/auth/reset-password?message=All fields are required")
+  }
+
+  if (password.length < 6) {
+    redirect("/auth/reset-password?message=Password must be at least 6 characters long")
+  }
+
+  if (password !== confirmPassword) {
+    redirect("/auth/reset-password?message=Passwords do not match")
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: password,
+  })
+
+  if (error) {
+    console.error("Reset password error:", error)
+    redirect("/auth/reset-password?message=Failed to reset password. Please try again.")
+  }
+
+  revalidatePath("/", "layout")
+  redirect("/auth?message=Success! Your password has been reset. Please sign in with your new password.")
+}

@@ -26,6 +26,14 @@ import {
 import Link from "next/link"
 import { login, signup } from "./actions"
 import { LoadingButton } from "@/components/loading-button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -33,6 +41,10 @@ export default function AuthPage() {
   const [loginPending, startLoginTransition] = useTransition()
   const [signupPending, startSignupTransition] = useTransition()
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
+  const [resetEmailSent, setResetEmailSent] = useState(false)
+  const [resetPending, startResetTransition] = useTransition()
+  const [resetEmail, setResetEmail] = useState("")
 
   const searchParams = useSearchParams()
   const message = searchParams.get("message")
@@ -101,6 +113,30 @@ export default function AuthPage() {
       emailInput.value = "demo@deadlinemate.com"
       passwordInput.value = "demo123"
     }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!resetEmail || !validateEmail(resetEmail)) {
+      setFormErrors({ resetEmail: "Please enter a valid email" })
+      return
+    }
+
+    setFormErrors({})
+    startResetTransition(async () => {
+      try {
+        const supabase = (await import("@/utils/supabase/client")).createClient()
+        const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+          redirectTo: `${window.location.origin}/auth/reset-password`,
+        })
+
+        if (error) throw error
+
+        setResetEmailSent(true)
+      } catch (error) {
+        console.error("[v0] Forgot password error:", error)
+        setFormErrors({ resetEmail: "Failed to send reset email. Please try again." })
+      }
+    })
   }
 
   return (
@@ -224,9 +260,95 @@ export default function AuthPage() {
                         Remember me
                       </Label>
                     </div>
-                    <Link href="#" className="text-sm text-emerald-600 hover:text-emerald-500">
-                      Forgot password?
-                    </Link>
+                    <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+                      <DialogTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-sm text-emerald-600 hover:text-emerald-500"
+                          onClick={() => {
+                            setResetEmailSent(false)
+                            setResetEmail("")
+                            setFormErrors({})
+                          }}
+                        >
+                          Forgot password?
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>{resetEmailSent ? "Check your email" : "Reset your password"}</DialogTitle>
+                          <DialogDescription>
+                            {resetEmailSent
+                              ? "We've sent you a password reset link. Please check your email inbox and spam folder."
+                              : "Enter your email address and we'll send you a link to reset your password."}
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        {!resetEmailSent ? (
+                          <div className="space-y-4 pt-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="reset-email">Email</Label>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <Input
+                                  id="reset-email"
+                                  type="email"
+                                  placeholder="Enter your email"
+                                  value={resetEmail}
+                                  onChange={(e) => setResetEmail(e.target.value)}
+                                  className={`pl-10 ${formErrors.resetEmail ? "border-red-500" : ""}`}
+                                  disabled={resetPending}
+                                />
+                              </div>
+                              {formErrors.resetEmail && <p className="text-sm text-red-600">{formErrors.resetEmail}</p>}
+                            </div>
+
+                            <div className="flex gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setForgotPasswordOpen(false)}
+                                className="flex-1"
+                                disabled={resetPending}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={handleForgotPassword}
+                                className="flex-1 bg-emerald-500 hover:bg-emerald-600"
+                                disabled={resetPending}
+                              >
+                                {resetPending ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Sending...
+                                  </>
+                                ) : (
+                                  "Send Reset Link"
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="pt-4">
+                            <Alert className="border-emerald-200 bg-emerald-50">
+                              <CheckCircle className="h-4 w-4 text-emerald-600" />
+                              <AlertDescription className="text-emerald-800">
+                                Password reset email sent to <strong>{resetEmail}</strong>
+                              </AlertDescription>
+                            </Alert>
+                            <Button
+                              type="button"
+                              onClick={() => setForgotPasswordOpen(false)}
+                              className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600"
+                            >
+                              Close
+                            </Button>
+                          </div>
+                        )}
+                      </DialogContent>
+                    </Dialog>
                   </div>
 
                   <Button

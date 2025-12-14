@@ -290,7 +290,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: { 
           const activityIds = activities.map((a) => a.id)
 
           const { data: userSchedules, error: schedulesError } = await supabase
-            .from("schedules")
+            .from("activity_schedules")
             .select("*")
             .in("activity_id", activityIds)
             .order("day_of_week", { ascending: true })

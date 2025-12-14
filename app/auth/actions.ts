@@ -129,6 +129,8 @@ export async function resetPassword(formData: FormData) {
   const password = formData.get("password") as string
   const confirmPassword = formData.get("confirmPassword") as string
 
+  console.log("[v0] Reset password action called")
+
   // Validation
   if (!password || !confirmPassword) {
     redirect("/auth/reset-password?message=All fields are required")
@@ -142,14 +144,39 @@ export async function resetPassword(formData: FormData) {
     redirect("/auth/reset-password?message=Passwords do not match")
   }
 
-  const { error } = await supabase.auth.updateUser({
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession()
+
+  console.log("[v0] Session check:", {
+    hasSession: !!session,
+    userId: session?.user?.id,
+    sessionError: sessionError?.message,
+  })
+
+  if (!session) {
+    console.error("[v0] No session found for password reset")
+    redirect("/auth?message=Your reset link has expired. Please request a new password reset.")
+  }
+
+  const { data, error: updateError } = await supabase.auth.updateUser({
     password: password,
   })
 
-  if (error) {
-    console.error("Reset password error:", error)
+  console.log("[v0] Password update result:", {
+    success: !!data?.user,
+    error: updateError?.message,
+  })
+
+  if (updateError) {
+    console.error("[v0] Reset password error:", updateError)
     redirect("/auth/reset-password?message=Failed to reset password. Please try again.")
   }
+
+  console.log("[v0] Password reset successful")
+
+  await supabase.auth.signOut()
 
   revalidatePath("/", "layout")
   redirect("/auth?message=Success! Your password has been reset. Please sign in with your new password.")

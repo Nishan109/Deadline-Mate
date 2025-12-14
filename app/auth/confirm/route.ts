@@ -12,31 +12,50 @@ export async function GET(request: NextRequest) {
   console.log("[v0] Auth confirm - next:", next)
   console.log("[v0] Auth confirm - full URL:", request.url)
 
+  const redirectUrl = new URL(request.url)
+
   if (token_hash && type) {
     const supabase = await createClient()
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       type: type as any,
       token_hash,
     })
 
-    console.log("[v0] Auth confirm - verifyOtp error:", error)
+    console.log("[v0] Auth confirm - verifyOtp result:", {
+      hasSession: !!data?.session,
+      hasUser: !!data?.user,
+      error: error?.message,
+    })
 
-    if (!error) {
+    if (!error && data?.session) {
+      console.log("[v0] Auth confirm - Session established successfully")
+
       if (type === "recovery") {
         console.log("[v0] Auth confirm - Recovery type detected, redirecting to reset-password")
-        return NextResponse.redirect(new URL("/auth/reset-password", request.url))
+        redirectUrl.pathname = "/auth/reset-password"
+        redirectUrl.search = "" // Clear all query params
+
+        const response = NextResponse.redirect(redirectUrl)
+
+        // Ensure session cookies are set in the response
+        return response
       }
 
       console.log("[v0] Auth confirm - Standard type, redirecting to:", next)
-      return NextResponse.redirect(new URL(next, request.url))
+      redirectUrl.pathname = next
+      redirectUrl.search = ""
+      return NextResponse.redirect(redirectUrl)
     } else {
-      console.log("[v0] Auth confirm - Verification failed with error:", error.message)
+      console.error("[v0] Auth confirm - Verification failed:", error?.message || "No session created")
+      redirectUrl.pathname = "/auth"
+      redirectUrl.search = `?message=${encodeURIComponent("Could not verify email. Please try again.")}`
+      return NextResponse.redirect(redirectUrl)
     }
   } else {
     console.log("[v0] Auth confirm - Missing token_hash or type")
+    redirectUrl.pathname = "/auth"
+    redirectUrl.search = `?message=${encodeURIComponent("Invalid verification link")}`
+    return NextResponse.redirect(redirectUrl)
   }
-
-  // return the user to an error page with instructions
-  return NextResponse.redirect(new URL("/auth?message=Could not verify email", request.url))
 }

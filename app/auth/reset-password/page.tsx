@@ -1,26 +1,94 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { useSearchParams } from "next/navigation"
+import type React from "react"
+
+import { useState, useTransition, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Target, Eye, EyeOff, Lock, AlertCircle, Loader2, ArrowLeft } from "lucide-react"
+import { Target, Eye, EyeOff, Lock, AlertCircle, Loader2, ArrowLeft, CheckCircle } from "lucide-react"
 import Link from "next/link"
-import { resetPassword } from "../actions"
+import { createClient } from "@/utils/supabase/client"
 
 export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [resetPending, startResetTransition] = useTransition()
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null)
+  const [sessionVerified, setSessionVerified] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+  const router = useRouter()
 
-  const searchParams = useSearchParams()
-  const message = searchParams.get("message")
+  useEffect(() => {
+    const verifySession = async () => {
+      const supabase = createClient()
 
-  const handleSubmit = (formData: FormData) => {
+      // Check if there's a recovery token in the URL hash
+      const hashParams = new URLSearchParams(window.location.hash.substring(1))
+      const accessToken = hashParams.get("access_token")
+      const refreshToken = hashParams.get("refresh_token")
+      const type = hashParams.get("type")
+
+      console.log("[v0] Reset password page loaded", { hasAccessToken: !!accessToken, type })
+
+      // If we have tokens in the hash, set the session
+      if (accessToken && type === "recovery") {
+        console.log("[v0] Found recovery tokens in URL, setting session...")
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || "",
+        })
+
+        if (error) {
+          console.error("[v0] Error setting session:", error)
+          setMessage({
+            type: "error",
+            text: "Your reset link is invalid or has expired. Please request a new password reset.",
+          })
+          setCheckingSession(false)
+          return
+        }
+
+        // Clear the hash from URL for security
+        window.history.replaceState(null, "", window.location.pathname)
+      }
+
+      // Verify we have a valid session
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      console.log("[v0] Session verification:", {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        error: sessionError?.message,
+      })
+
+      if (!session) {
+        setMessage({
+          type: "error",
+          text: "Your reset link has expired. Please request a new password reset.",
+        })
+        setCheckingSession(false)
+        return
+      }
+
+      setSessionVerified(true)
+      setCheckingSession(false)
+    }
+
+    verifySession()
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    const formData = new FormData(e.currentTarget)
     const password = formData.get("password") as string
     const confirmPassword = formData.get("confirmPassword") as string
 
@@ -35,10 +103,70 @@ export default function ResetPasswordPage() {
     setFormErrors(errors)
 
     if (Object.keys(errors).length === 0) {
-      startResetTransition(() => {
-        resetPassword(formData)
+      startResetTransition(async () => {
+        try {
+          const supabase = createClient()
+
+          console.log("[v0] Updating password...")
+          const { data, error } = await supabase.auth.updateUser({
+            password: password,
+          })
+
+          if (error) {
+            console.error("[v0] Password update error:", error)
+            setMessage({ type: "error", text: "Failed to reset password. Please try again." })
+            return
+          }
+
+          console.log("[v0] Password updated successfully")
+
+          // Sign out the user so they can login with new password
+          await supabase.auth.signOut()
+
+          // Redirect to login with success message
+          router.push("/auth?message=Success! Your password has been reset. Please sign in with your new password.")
+        } catch (error) {
+          console.error("[v0] Unexpected error:", error)
+          setMessage({ type: "error", text: "An unexpected error occurred. Please try again." })
+        }
       })
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mx-auto mb-4" />
+          <p className="text-gray-600">Verifying your reset link...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!sessionVerified) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <Card className="border-0 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold text-center text-red-600">Reset Link Expired</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
+                  {message?.text || "Your reset link has expired. Please request a new password reset."}
+                </AlertDescription>
+              </Alert>
+              <Button asChild className="w-full bg-emerald-500 hover:bg-emerald-600">
+                <Link href="/auth">Back to Sign In</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -62,9 +190,17 @@ export default function ResetPasswordPage() {
         </div>
 
         {message && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">{message}</AlertDescription>
+          <Alert
+            className={`mb-6 ${message.type === "error" ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}
+          >
+            {message.type === "error" ? (
+              <AlertCircle className="h-4 w-4 text-red-600" />
+            ) : (
+              <CheckCircle className="h-4 w-4 text-emerald-600" />
+            )}
+            <AlertDescription className={message.type === "error" ? "text-red-800" : "text-emerald-800"}>
+              {message.text}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -74,7 +210,7 @@ export default function ResetPasswordPage() {
             <CardDescription className="text-center">Enter your new password below</CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="password">New Password</Label>
                 <div className="relative">

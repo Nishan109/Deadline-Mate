@@ -6,19 +6,7 @@ import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Calendar,
-  Clock,
-  ExternalLink,
-  Share2,
-  AlertCircle,
-  Timer,
-  ArrowRight,
-  Target,
-  Plus,
-  CheckCircle,
-  Star
-} from "lucide-react"
+import { Calendar, Clock, ExternalLink, Share2, AlertCircle, Timer, ArrowRight, Target, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import AddToMyDeadlinesButton from "./AddToMyDeadlinesButton"
@@ -66,68 +54,36 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
         setLoading(true)
         setError(null)
 
-        const supabase = createClient()
-        
-        const { data, error: queryError } = await supabase
-          .from("shared_deadlines")
-          .select(`
-            id,
-            deadline_id,
-            share_token,
-            created_by,
-            expires_at,
-            is_active,
-            view_count,
-            created_at,
-            updated_at,
-            deadlines (
-              id,
-              title,
-              description,
-              due_date,
-              priority,
-              status,
-              category,
-              project_link,
-              created_at,
-              user_id
-            )
-          `)
-          .eq("share_token", token)
-          .eq("is_active", true)
-          .single()
+        console.log("[v0] Fetching shared deadline via API route...")
 
-        if (queryError) {
-          console.error("Client-side query error:", queryError)
-          setError(queryError.message)
+        // Use API route to fetch shared deadline with service role bypass
+        const response = await fetch(`/api/shared-deadline/${token}`)
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          console.error("[v0] API error:", errorData)
+
+          if (response.status === 410) {
+            setError("This shared deadline has expired")
+          } else if (response.status === 404) {
+            setError("Shared deadline not found")
+          } else {
+            setError(errorData.error || "Failed to load shared deadline")
+          }
           return
         }
 
-        if (!data) {
+        const data = await response.json()
+        console.log("[v0] Successfully fetched shared deadline:", data)
+
+        if (!data || !data.deadlines) {
           setError("Shared deadline not found")
           return
         }
 
-        // Check if expired
-        if (data.expires_at && new Date(data.expires_at) < new Date()) {
-          setError("This shared deadline has expired")
-          return
-        }
-
         setSharedDeadline(data)
-
-        // Increment view count
-        supabase
-          .from("shared_deadlines")
-          .update({ view_count: (data.view_count || 0) + 1 })
-          .eq("id", data.id)
-          .then(({ error }: { error: any }) => {
-            if (error) {
-              console.error("Error updating view count:", error)
-            }
-          })
       } catch (err) {
-        console.error("Client-side fetch error:", err)
+        console.error("[v0] Fetch error:", err)
         setError(err instanceof Error ? err.message : "An error occurred")
       } finally {
         setLoading(false)
@@ -148,19 +104,24 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
     try {
       setAdding(true)
       const supabase = createClient()
-      const { data: userRes } = await supabase.auth.getUser()
 
-      if (!userRes?.user) {
-        // Redirect to auth and come back to auto-add
-        const redirect = encodeURIComponent(`/shared/${token}?autoAdd=1`)
-        router.push(`/auth?redirect=${redirect}`)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push(`/auth?redirectTo=/shared/${token}?autoAdd=1`)
         return
       }
 
-      const deadline = sharedDeadline!.deadlines
+      if (!sharedDeadline?.deadlines) {
+        throw new Error("No deadline data available")
+      }
+
+      const deadline = sharedDeadline.deadlines
 
       const { error: insertError } = await supabase.from("deadlines").insert({
-        user_id: userRes.user.id,
+        user_id: user.id,
         title: deadline.title,
         description: deadline.description,
         due_date: deadline.due_date,
@@ -170,58 +131,42 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
         project_link: deadline.project_link,
       })
 
-      if (insertError) {
-        console.error("Insert error:", insertError)
-        setError(insertError.message)
-        return
-      }
+      if (insertError) throw insertError
 
-      // Go to dashboard after success
-      router.push("https://v0-deadline-mate-landing-page.vercel.app/dashboard")
-    } catch (err: any) {
-      console.error("Add to my deadlines failed:", err)
-      setError(err?.message ?? "Failed to add deadline")
+      router.push("/dashboard?added=true")
+    } catch (err) {
+      console.error("[v0] Error adding deadline:", err)
+      alert("Failed to add deadline to your account. Please try again.")
     } finally {
       setAdding(false)
     }
   }
 
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader className="text-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Target className="w-6 h-6 text-blue-600 animate-pulse" />
-            </div>
-            <CardTitle className="text-blue-900">Loading Shared Deadline</CardTitle>
-            <CardDescription className="text-blue-700">
-              Please wait while we fetch the deadline details...
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-emerald-50">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-emerald-600 mx-auto" />
+          <p className="text-gray-600">Loading shared deadline...</p>
+        </div>
       </div>
     )
   }
 
-  if (error || !sharedDeadline) {
+  // Error state
+  if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-orange-50 p-4">
         <Card className="max-w-md w-full">
           <CardHeader className="text-center">
             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-6 h-6 text-red-600" />
             </div>
-            <CardTitle className="text-red-900">Error Loading Deadline</CardTitle>
-            <CardDescription className="text-red-700">
-              {error || "An error occurred while loading the shared deadline."}
-            </CardDescription>
+            <CardTitle className="text-red-900">Unable to Load Shared Deadline</CardTitle>
+            <CardDescription className="text-red-700">{error}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <h4 className="font-medium text-red-900 mb-2">Error Details:</h4>
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
             <div className="flex space-x-2">
               <Link href="/" className="flex-1">
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-700">Go to Homepage</Button>
@@ -233,80 +178,30 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
     )
   }
 
+  if (!sharedDeadline || !sharedDeadline.deadlines) {
+    return null
+  }
+
   const deadline = sharedDeadline.deadlines
   const dueDate = new Date(deadline.due_date)
   const now = new Date()
-  
-  // Simple and reliable overdue detection
-  const isOverdue = dueDate < now && deadline.status !== "completed"
-  
-  
-  // Calculate days until due using Asia/Kolkata calendar days to avoid off-by-one
-  const kolkataNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }))
-  const kolkataDue = new Date(new Date(deadline.due_date).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }))
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const dStart = startOfDay(kolkataDue).getTime()
-  const nStart = startOfDay(kolkataNow).getTime()
-  const daysUntilDue = Math.round((dStart - nStart) / (1000 * 60 * 60 * 24))
-  
-  
-  // Create date formatters for Asia/Kolkata timezone
-  const kolkataTimeFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-  
-  const kolkataDateFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-  
-  // Format the date and time for display
-  const properDisplayDate = new Date(deadline.due_date)
-  const kolkataTime = kolkataTimeFormatter.format(properDisplayDate)
-  const kolkataDateFormatted = kolkataDateFormatter.format(properDisplayDate)
+  const diffTime = dueDate.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "bg-red-500"
-      case "medium":
-        return "bg-orange-500"
-      case "low":
-        return "bg-green-500"
-      default:
-        return "bg-gray-500"
-    }
+  const priorityColors = {
+    low: "bg-blue-100 text-blue-800 border-blue-200",
+    medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    high: "bg-red-100 text-red-800 border-red-200",
   }
 
-  // Calendar helpers for Google Calendar and Outlook
-  const handleOpenGoogleCalendar = () => {
-    const start = new Date(deadline.due_date)
-    const end = new Date(start.getTime() + 60 * 60 * 1000)
-    const pad = (n: number) => String(n).padStart(2, "0")
-    const fmt = (d: Date) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
-    const dates = `${fmt(start)}/${fmt(end)}`
-    const text = encodeURIComponent(deadline.title || "Deadline")
-    const details = encodeURIComponent(deadline.description || "")
-    const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}&dates=${dates}`
-    window.open(url, "_blank")
+  const statusColors = {
+    pending: "bg-gray-100 text-gray-800 border-gray-200",
+    in_progress: "bg-blue-100 text-blue-800 border-blue-200",
+    completed: "bg-green-100 text-green-800 border-green-200",
+    overdue: "bg-red-100 text-red-800 border-red-200",
   }
 
-  const handleOpenOutlook = () => {
-    const start = new Date(deadline.due_date)
-    const end = new Date(start.getTime() + 60 * 60 * 1000)
-    const subject = encodeURIComponent(deadline.title || "Deadline")
-    const body = encodeURIComponent((deadline.description || "") + "\n\nAdded from DeadlineMate")
-    const startIso = encodeURIComponent(start.toISOString())
-    const endIso = encodeURIComponent(end.toISOString())
-    const url = `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${subject}&body=${body}&startdt=${startIso}&enddt=${endIso}&allday=false`
-    window.open(url, "_blank")
-  }
+  const timeLeftColor = diffDays <= 1 ? "text-red-600" : diffDays <= 3 ? "text-orange-600" : "text-blue-600"
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
@@ -323,16 +218,13 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
                 <p className="text-xs sm:text-sm text-gray-600">Shared Deadline</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <AddToMyDeadlinesButton token={token} deadline={deadline} />
-              <Link href="https://v0-deadline-mate-landing-page.vercel.app/dashboard">
+            <Link href="/">
               <Button variant="outline" size="sm" className="bg-transparent text-xs sm:text-sm">
                 <span className="hidden sm:inline">Try DeadlineMate</span>
                 <span className="sm:hidden">Try App</span>
                 <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
               </Button>
-              </Link>
-            </div>
+            </Link>
           </div>
         </div>
       </header>
@@ -340,73 +232,32 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-          {/* Main Deadline Card */}
+          {/* Deadline Card */}
           <div className="lg:col-span-2">
-            <Card className="group relative overflow-hidden bg-white border-0 shadow-xl hover:shadow-2xl transition-all duration-500 rounded-2xl bg-gradient-to-br from-white to-gray-50 cursor-pointer active:scale-[0.98]">
-              {/* Priority indicator bar */}
-              <div className={`absolute top-0 left-0 w-1 h-full ${getPriorityColor(deadline.priority).replace('border-l-', 'bg-')} rounded-l-2xl`} />
-              
-              {/* Status indicator overlay */}
-              {deadline.status === "completed" && (
-                <div className="absolute top-6 right-6 z-10">
-                  <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
-                    <CheckCircle className="w-6 h-6 text-white" />
-                  </div>
-                </div>
-              )}
-
-              <CardHeader className="p-4 sm:p-6 pb-4">
+            <Card className="shadow-lg border-0 bg-white">
+              <CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 break-words group-hover:text-gray-800 transition-colors">
+                    <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-2 break-words">
                       {deadline.title}
                     </CardTitle>
-                    <div className="flex items-center gap-2 sm:gap-3 mb-6 flex-wrap">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-4 flex-wrap">
                       <Badge
-                        variant="outline"
-                        className={`text-sm font-medium ${
-                          deadline.priority === "high"
-                            ? "border-red-200 text-red-700 bg-gradient-to-r from-red-50 to-pink-50 hover:bg-red-100"
-                            : deadline.priority === "medium"
-                              ? "border-orange-200 text-orange-700 bg-gradient-to-r from-orange-50 to-amber-50 hover:bg-orange-100"
-                              : "border-green-200 text-green-700 bg-gradient-to-r from-green-50 to-emerald-50 hover:bg-green-100"
-                        } transition-colors`}
+                        className={`${
+                          priorityColors[deadline.priority as keyof typeof priorityColors]
+                        } border text-xs sm:text-sm`}
                       >
-                        <Star className="w-4 h-4 mr-2" />
                         {deadline.priority} priority
                       </Badge>
                       <Badge
-                        className={`text-sm font-semibold px-4 py-2 rounded-full shadow-lg border-0 ${
-                          isOverdue 
-                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white"
-                            : deadline.status === "completed"
-                              ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
-                              : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
-                        }`}
+                        className={`${
+                          statusColors[deadline.status as keyof typeof statusColors]
+                        } border text-xs sm:text-sm`}
                       >
-                        {isOverdue ? (
-                          <>
-                            <AlertCircle className="w-4 h-4 mr-2" />
-                            Overdue
-                          </>
-                        ) : deadline.status === "completed" ? (
-                          <>
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Completed
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-4 h-4 mr-2" />
-                            {deadline.status.replace("_", " ")}
-                          </>
-                        )}
+                        {deadline.status.replace("_", " ")}
                       </Badge>
                       {deadline.category && (
-                        <Badge 
-                          variant="outline" 
-                          className="text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
-                        >
-                          <div className="w-2 h-2 bg-blue-500 rounded-full mr-2" />
+                        <Badge variant="outline" className="bg-gray-50 text-xs sm:text-sm">
                           {deadline.category}
                         </Badge>
                       )}
@@ -415,32 +266,26 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
                 </div>
 
                 {/* Due Date Section */}
-                <div className="bg-gradient-to-r from-gray-100 to-gray-200 rounded-2xl p-4 sm:p-6 border-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center space-x-3 sm:space-x-4">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg">
-                        <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                      </div>
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 border">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+                    <div className="flex items-center space-x-3">
+                      <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 flex-shrink-0" />
                       <div>
-                        <p className="font-bold text-gray-900 text-base sm:text-lg">
-                          {kolkataDateFormatted}
+                        <p className="font-medium text-gray-900 text-sm sm:text-base">
+                          {format(dueDate, "EEEE, MMMM do, yyyy")}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 flex items-center">
-                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                          {kolkataTime}
+                          <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                          {format(dueDate, "h:mm a")}
                         </p>
                       </div>
                     </div>
                     <div className="text-left sm:text-right">
-                      <div className={`flex items-center justify-start sm:justify-end ${isOverdue ? "text-red-600" : "text-blue-600"}`}>
+                      <div className={`flex items-center ${timeLeftColor}`}>
                         <Timer className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                        <div className="text-left sm:text-right">
-                          <p className="font-bold text-base sm:text-lg">
-                            {isOverdue 
-                              ? "Overdue" 
-                              : daysUntilDue > 0 
-                                ? `${daysUntilDue} days left` 
-                                : "Due today"}
+                        <div className="text-right">
+                          <p className="font-medium">
+                            {diffDays > 0 ? `${diffDays} day${diffDays !== 1 ? "s" : ""} left` : "Due today"}
                           </p>
                         </div>
                       </div>
@@ -451,40 +296,34 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
 
               <CardContent className="p-4 sm:p-6 pt-0 space-y-4 sm:space-y-6">
                 {/* Description */}
-                <div>
-                  <h3 className="font-bold text-gray-900 mb-3 text-base sm:text-lg flex items-center">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 sm:mr-3" />
-                    Description
-                  </h3>
-                  <div className="bg-gray-50 rounded-xl p-3 sm:p-4 border-0">
-                    <p className="text-gray-700 leading-relaxed text-sm sm:text-base break-words">
-                      {deadline.description || "No description available."}
+                {deadline.description && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Description</h3>
+                    <p className="text-gray-700 leading-relaxed text-sm sm:text-base break-words whitespace-pre-wrap">
+                      {deadline.description}
                     </p>
                   </div>
-                </div>
+                )}
 
                 {/* Project Link */}
                 {deadline.project_link && (
                   <div>
-                    <h3 className="font-bold text-gray-900 mb-3 text-base sm:text-lg flex items-center">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2 sm:mr-3" />
-                      Project Resources
-                    </h3>
+                    <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Project Resources</h3>
                     <a
                       href={deadline.project_link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm sm:text-base break-all bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 px-3 sm:px-4 py-2 sm:py-3 rounded-xl border border-blue-200 hover:border-blue-300 transition-all duration-200 font-medium"
+                      className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm sm:text-base break-all"
                     >
-                      <ExternalLink className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3 flex-shrink-0" />
-                      <span>View Project</span>
+                      <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 flex-shrink-0" />
+                      <span className="truncate">{deadline.project_link}</span>
                     </a>
                   </div>
                 )}
-              </CardContent>
 
-              {/* Hover effect overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-transparent group-hover:from-white/5 group-hover:via-white/10 group-hover:to-white/5 transition-all duration-500 rounded-2xl pointer-events-none" />
+                {/* Add to My Deadlines Button */}
+                <AddToMyDeadlinesButton deadline={deadline} adding={adding} onAdd={handleAddToMyDeadlines} />
+              </CardContent>
             </Card>
           </div>
 
@@ -501,36 +340,50 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between items-center">
                   <span className="text-blue-700 font-medium text-sm sm:text-base">Shared By:</span>
-                  <span className="text-blue-900 text-sm sm:text-base">{sharedDeadline.created_by}</span>
+                  <span className="text-blue-900 text-sm sm:text-base truncate max-w-[150px]">
+                    {sharedDeadline.created_by.substring(0, 8)}...
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-blue-700 font-medium text-sm sm:text-base">Views:</span>
-                  <span className="text-blue-900 text-sm sm:text-base">{sharedDeadline.view_count || 0}</span>
+                  <span className="text-blue-900 text-sm sm:text-base">{sharedDeadline.view_count}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-blue-700 font-medium text-sm sm:text-base">Expires:</span>
-                  <span className="text-blue-900 text-sm sm:text-base">
-                    {sharedDeadline.expires_at ? format(new Date(sharedDeadline.expires_at), "PPP") : "Never"}
-                  </span>
-                </div>
+                {sharedDeadline.expires_at && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-blue-700 font-medium text-sm sm:text-base">Expires:</span>
+                    <span className="text-blue-900 text-sm sm:text-base">
+                      {format(new Date(sharedDeadline.expires_at), "MMM do, yyyy")}
+                    </span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Add to Calendar */}
-            <Card className="bg-white border-gray-200">
+            {/* Call to Action */}
+            <Card className="bg-emerald-50 border-emerald-200">
               <CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
-                <CardTitle className="text-lg flex items-center text-gray-900">
-                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                  Add to Calendar
-                </CardTitle>
+                <CardTitle className="text-lg text-emerald-900">Try DeadlineMate</CardTitle>
+                <CardDescription className="text-emerald-700 text-sm sm:text-base">
+                  Organize your deadlines and collaborate with your team
+                </CardDescription>
               </CardHeader>
-              <CardContent className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleOpenGoogleCalendar}>
-                  Add to Google Calendar
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleOpenOutlook}>
-                  Add to Outlook
-                </Button>
+              <CardContent className="p-4 sm:p-6 pt-0 space-y-3 sm:space-y-4">
+                <div className="space-y-2 sm:space-y-3">
+                  <Link href="/" className="block">
+                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-sm sm:text-base h-9 sm:h-10">
+                      Get Started Free
+                      <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 ml-2" />
+                    </Button>
+                  </Link>
+                  <Link href="/auth" className="block">
+                    <Button
+                      variant="outline"
+                      className="w-full bg-transparent border-emerald-300 text-emerald-700 hover:bg-emerald-100 text-sm sm:text-base h-9 sm:h-10"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -541,7 +394,7 @@ export default function SharedDeadlineClient({ token }: SharedDeadlineClientProp
       <footer className="bg-white border-t border-gray-200 mt-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 text-xs sm:text-sm text-gray-600">
-            <p>© 2024 DeadlineMate. All rights reserved.</p>
+            <p>© 2025 DeadlineMate. All rights reserved.</p>
             <div className="flex items-center space-x-4">
               <Link href="/" className="hover:text-gray-900">
                 Home
